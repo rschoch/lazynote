@@ -1,0 +1,145 @@
+# lazynote
+
+Small terminal notes app built with `gocui`.
+
+## Install
+
+From source:
+
+```sh
+go install github.com/layos/lazynote/cmd/lazynote@latest
+```
+
+From a checkout:
+
+```sh
+make build
+make install
+```
+
+`make install` writes the binary to `/usr/local/bin` by default. Set `PREFIX` to
+choose another root:
+
+```sh
+make install PREFIX="$HOME/.local"
+```
+
+## Usage
+
+Add a note:
+
+```sh
+lazynote mytitle "my note on something i shouldnt forget to do later"
+```
+
+Add a note from stdin:
+
+```sh
+echo "my note from another command" | lazynote mytitle
+cat summary.md | lazynote "session summary"
+lazynote "session summary" - < summary.md
+```
+
+If stdin is piped without a title, `lazynote` uses the first non-empty line as
+the title:
+
+```sh
+printf '## Session abc123\n- shipped release prep\n' | lazynote
+```
+
+List saved notes:
+
+```sh
+lazynote list
+```
+
+`list` prints tab-separated `id`, `created_at`, and `title` fields. Use the ID
+to print a full note:
+
+```sh
+lazynote show <id>
+```
+
+`show` also accepts a unique ID prefix. Search note titles and bodies:
+
+```sh
+lazynote search packaging
+lazynote search "session summary"
+```
+
+Open the terminal UI:
+
+```sh
+lazynote
+```
+
+Print version metadata:
+
+```sh
+lazynote --version
+```
+
+The UI shows note titles on the left and the selected note body on the right.
+
+Keys:
+
+- left / `h`: focus the notes list
+- right / `l`: focus the selected note body
+- `j` / down: move down in the active pane
+- `k` / up: move up in the active pane
+- PageDown / Ctrl-D: scroll selected note body down
+- PageUp / Ctrl-U: scroll selected note body up
+- `d` / delete: delete selected note
+- `q` / Ctrl-C: quit
+
+Terminal fonts are controlled by your terminal emulator. `lazynote` uses rounded
+borders, color, and simple glyphs where the terminal supports them.
+
+## Storage
+
+Notes are stored as JSON at:
+
+```text
+~/.local/share/lazynote/notes.json
+```
+
+Set `LAZYNOTE_PATH` to use a different notes file.
+
+## Development
+
+Run the tests:
+
+```sh
+make test
+```
+
+Build a local binary:
+
+```sh
+make build
+bin/lazynote --version
+```
+
+Useful make targets:
+
+- `make build`: build `bin/lazynote`
+- `make test`: run `go test ./...`
+- `make install`: install the binary under `$(PREFIX)/bin`
+- `make uninstall`: remove the installed binary from `$(PREFIX)/bin`
+- `make clean`: remove local build and release artifacts
+
+## Releases
+
+Release configuration lives in `.goreleaser.yaml`. It builds `lazynote` for
+Linux, macOS, and Windows on `amd64` and `arm64`, injects version metadata, and
+produces checksums, archives, and Linux `.deb`, `.rpm`, and `.apk` packages.
+Install GoReleaser before running release targets.
+
+Create a local release snapshot:
+
+```sh
+make release-snapshot
+```
+
+Publishing installable apt/yum/apk repositories or Homebrew taps is a separate
+distribution step after release artifacts exist.

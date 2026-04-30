@@ -1,0 +1,290 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/layos/lazynote/internal/notes"
+	"github.com/layos/lazynote/internal/ui"
+)
+
+const maxInferredTitleRunes = 80
+
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "source"
+)
+
+func main() {
+	if err := run(os.Args[1:], os.Stdin, os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string, stdin io.Reader, stdout io.Writer) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "--help", "-h", "help":
+			printUsage(stdout)
+			return nil
+		case "--version", "-v", "version":
+			fmt.Fprintln(stdout, versionString())
+			return nil
+		}
+	}
+
+	path, err := notes.DefaultPath()
+	if err != nil {
+		return err
+	}
+	store := notes.NewStore(path)
+
+	if len(args) > 0 {
+		switch args[0] {
+		case "list":
+			return runList(store, args[1:], stdout)
+		case "show":
+			return runShow(store, args[1:], stdout)
+		case "search":
+			return runSearch(store, args[1:], stdout)
+		}
+	}
+
+	title, body, appendNote, err := noteInput(args, stdin)
+	if err != nil {
+		return err
+	}
+	if !appendNote {
+		return ui.New(store).Run()
+	}
+	if _, err := store.Append(title, body); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(stdout, "noted")
+	return nil
+}
+
+func printUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  lazynote <title> <note>
+  lazynote <title> -
+  command | lazynote <title>
+  command | lazynote
+  lazynote list
+  lazynote show <id>
+  lazynote search <query>
+  lazynote
+  lazynote --version
+  lazynote --help
+
+Commands:
+  <title> <note>  Append a note from arguments
+  <title> -       Append a note using stdin as the body
+  list            List note IDs, timestamps, and titles
+  show <id>       Print one note by ID or unique ID prefix
+  search <query>  List notes matching title or body text
+  version         Print version information
+  help            Print this help text
+
+Environment:
+  LAZYNOTE_PATH   Override the notes JSON file path
+`)
+}
+
+func versionString() string {
+	return fmt.Sprintf("lazynote %s (commit %s, built %s by %s)", version, commit, date, builtBy)
+}
+
+func runList(store *notes.Store, args []string, stdout io.Writer) error {
+	if len(args) != 0 {
+		return fmt.Errorf("usage: lazynote list")
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		return err
+	}
+	for _, note := range loaded {
+		fmt.Fprintln(stdout, noteSummary(note))
+	}
+	return nil
+}
+
+func runShow(store *notes.Store, args []string, stdout io.Writer) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: lazynote show <id>")
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		return err
+	}
+	note, err := findNote(loaded, args[0])
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(stdout, "id: %s\n", note.ID)
+	fmt.Fprintf(stdout, "created_at: %s\n", note.CreatedAt.UTC().Format(time.RFC3339))
+	fmt.Fprintf(stdout, "title: %s\n\n", note.Title)
+	fmt.Fprintln(stdout, note.Body)
+	return nil
+}
+
+func runSearch(store *notes.Store, args []string, stdout io.Writer) error {
+	query := strings.TrimSpace(strings.Join(args, " "))
+	if query == "" {
+		return fmt.Errorf("usage: lazynote search <query>")
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		return err
+	}
+
+	needle := strings.ToLower(query)
+	for _, note := range loaded {
+		if strings.Contains(strings.ToLower(note.Title), needle) || strings.Contains(strings.ToLower(note.Body), needle) {
+			fmt.Fprintln(stdout, noteSummary(note))
+		}
+	}
+	return nil
+}
+
+func noteSummary(note notes.Note) string {
+	return strings.Join([]string{
+		note.ID,
+		note.CreatedAt.UTC().Format(time.RFC3339),
+		oneLine(note.Title),
+	}, "\t")
+}
+
+func findNote(loaded []notes.Note, id string) (notes.Note, error) {
+	for _, note := range loaded {
+		if note.ID == id {
+			return note, nil
+		}
+	}
+
+	var matches []notes.Note
+	for _, note := range loaded {
+		if strings.HasPrefix(note.ID, id) {
+			matches = append(matches, note)
+		}
+	}
+
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return notes.Note{}, fmt.Errorf("note not found: %s", id)
+	default:
+		return notes.Note{}, fmt.Errorf("ambiguous note ID prefix: %s", id)
+	}
+}
+
+func noteInput(args []string, stdin io.Reader) (title, body string, appendNote bool, err error) {
+	switch {
+	case len(args) == 0:
+		if !stdinHasData(stdin) {
+			return "", "", false, nil
+		}
+
+		body, err := readBody(stdin)
+		if err != nil {
+			return "", "", false, err
+		}
+		return inferTitle(body), body, true, nil
+	case len(args) == 1:
+		if !stdinHasData(stdin) {
+			return "", "", false, fmt.Errorf("usage: lazynote <title> <note>")
+		}
+
+		body, err := readBody(stdin)
+		if err != nil {
+			return "", "", false, err
+		}
+		return args[0], body, true, nil
+	case len(args) == 2 && args[1] == "-":
+		body, err := readBody(stdin)
+		if err != nil {
+			return "", "", false, err
+		}
+		return args[0], body, true, nil
+	default:
+		return args[0], strings.Join(args[1:], " "), true, nil
+	}
+}
+
+func stdinHasData(stdin io.Reader) bool {
+	if stdin == nil {
+		return false
+	}
+
+	file, ok := stdin.(*os.File)
+	if !ok {
+		return true
+	}
+
+	info, err := file.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice == 0
+}
+
+func readBody(stdin io.Reader) (string, error) {
+	if stdin == nil {
+		return "", fmt.Errorf("note body is empty")
+	}
+
+	data, err := io.ReadAll(stdin)
+	if err != nil {
+		return "", fmt.Errorf("read note body from stdin: %w", err)
+	}
+
+	body := strings.TrimRight(string(data), "\r\n")
+	if strings.TrimSpace(body) == "" {
+		return "", fmt.Errorf("note body is empty")
+	}
+	return body, nil
+}
+
+func inferTitle(body string) string {
+	for _, line := range strings.Split(body, "\n") {
+		line = cleanTitleLine(line)
+		if line != "" {
+			return truncateRunes(line, maxInferredTitleRunes)
+		}
+	}
+	return "Untitled"
+}
+
+func cleanTitleLine(line string) string {
+	line = strings.TrimSpace(line)
+	line = strings.TrimLeft(line, "#")
+	line = strings.TrimSpace(line)
+	line = strings.Trim(line, "`*_")
+	return strings.TrimSpace(line)
+}
+
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+func truncateRunes(s string, max int) string {
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+
+	runes := []rune(s)
+	return string(runes[:max])
+}
