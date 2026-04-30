@@ -6,10 +6,40 @@ a scriptable command surface for saving and retrieving context from other tools.
 
 ## Install
 
-Download prebuilt archives and Linux packages from the
-[GitHub Releases](https://github.com/rschoch/lazynote/releases) page. Releases
-include Linux `.deb`, `.rpm`, and `.apk` packages, plus compressed archives for
-Linux, macOS, and Windows.
+Recommended install for Linux and macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/rschoch/lazynote/main/install.sh | sh
+```
+
+The installer downloads the latest release for your OS and architecture, checks
+the release checksum when `sha256sum` or `shasum` is available, and installs the
+binary to `~/.local/bin`.
+
+To inspect the script first:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/rschoch/lazynote/main/install.sh
+sh install.sh
+```
+
+You can choose another directory or pin a version:
+
+```sh
+sh install.sh --dir /usr/local/bin
+sh install.sh --version v0.1.0
+```
+
+System directories such as `/usr/local/bin` may require `sudo`.
+
+Prebuilt archives and Linux packages are also available from the
+[GitHub Releases](https://github.com/rschoch/lazynote/releases) page, including
+`.deb`, `.rpm`, and `.apk` packages. Download a package and install it with your
+system package manager, for example `sudo apt install ./lazynote_0.1.0_amd64.deb`.
+
+The installer and direct package downloads do not add an apt/yum/apk repository
+yet, so your system package manager will not discover future `lazynote` updates
+automatically.
 
 From source:
 
