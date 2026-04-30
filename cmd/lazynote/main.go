@@ -8,8 +8,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/layos/lazynote/internal/notes"
-	"github.com/layos/lazynote/internal/ui"
+	"github.com/rschoch/lazynote/internal/notes"
+	"github.com/rschoch/lazynote/internal/ui"
 )
 
 const maxInferredTitleRunes = 80

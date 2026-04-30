@@ -41,9 +41,9 @@ nfpms:
     ids:
       - lazynote
     file_name_template: "{{ .ConventionalFileName }}"
-    vendor: layos
-    homepage: https://github.com/layos/lazynote
-    maintainer: layos
+    vendor: rschoch
+    homepage: https://github.com/rschoch/lazynote
+    maintainer: rschoch <rschoch.dev@gmail.com>
     description: Small terminal notes app built with gocui.
     section: utils
     priority: optional
@@ -62,7 +62,7 @@ checksum:
 
 release:
   github:
-    owner: layos
+    owner: rschoch
     name: lazynote
 
 changelog:

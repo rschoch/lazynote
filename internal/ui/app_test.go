@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/awesome-gocui/gocui"
-	"github.com/layos/lazynote/internal/notes"
+	"github.com/rschoch/lazynote/internal/notes"
 )
 
-func TestDeleteSelectedNote(t *testing.T) {
+func TestDeleteSelectedNoteRequiresConfirmation(t *testing.T) {
 	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
 	if _, err := store.Append("first", "first body"); err != nil {
 		t.Fatalf("append first note: %v", err)
@@ -38,6 +38,23 @@ func TestDeleteSelectedNote(t *testing.T) {
 
 	loaded, err := store.Load()
 	if err != nil {
+		t.Fatalf("load notes after first delete key: %v", err)
+	}
+	if len(loaded) != 2 {
+		t.Fatalf("kept %d notes after first delete key, want 2", len(loaded))
+	}
+	if app.pendingDeleteID != second.ID {
+		t.Fatalf("pendingDeleteID = %q, want %q", app.pendingDeleteID, second.ID)
+	}
+	if !strings.Contains(app.status, "Press d again") {
+		t.Fatalf("status = %q, want delete confirmation", app.status)
+	}
+
+	screen.SendStringAsKeys("d")
+	screen.WaitSync()
+
+	loaded, err = store.Load()
+	if err != nil {
 		t.Fatalf("load notes: %v", err)
 	}
 	if len(loaded) != 1 {
@@ -45,6 +62,47 @@ func TestDeleteSelectedNote(t *testing.T) {
 	}
 	if loaded[0].ID == second.ID {
 		t.Fatalf("deleted wrong note: %#v", loaded[0])
+	}
+}
+
+func TestSelectionCancelsDeleteConfirmation(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	if _, err := store.Append("first", "first body"); err != nil {
+		t.Fatalf("append first note: %v", err)
+	}
+	if _, err := store.Append("second", "second body"); err != nil {
+		t.Fatalf("append second note: %v", err)
+	}
+
+	app := New(store)
+	g, err := app.newGUI(gocui.OutputSimulator)
+	if err != nil {
+		t.Fatalf("new gui: %v", err)
+	}
+	defer g.Close()
+
+	screen := g.GetTestingScreen()
+	stop := screen.StartGui()
+	defer stop()
+
+	screen.SendStringAsKeys("d")
+	screen.WaitSync()
+	if app.pendingDeleteID == "" {
+		t.Fatal("pendingDeleteID is empty, want armed delete")
+	}
+
+	screen.SendStringAsKeys("j")
+	screen.WaitSync()
+	if app.pendingDeleteID != "" {
+		t.Fatalf("pendingDeleteID = %q, want canceled delete", app.pendingDeleteID)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if len(loaded) != 2 {
+		t.Fatalf("kept %d notes, want 2", len(loaded))
 	}
 }
 

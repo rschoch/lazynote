@@ -1,4 +1,4 @@
-module github.com/layos/lazynote
+module github.com/rschoch/lazynote
 
 go 1.25
 

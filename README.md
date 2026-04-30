@@ -7,7 +7,7 @@ Small terminal notes app built with `gocui`.
 From source:
 
 ```sh
-go install github.com/layos/lazynote/cmd/lazynote@latest
+go install github.com/rschoch/lazynote/cmd/lazynote@latest
 ```
 
 From a checkout:

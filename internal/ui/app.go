@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/awesome-gocui/gocui"
-	"github.com/layos/lazynote/internal/notes"
+	"github.com/rschoch/lazynote/internal/notes"
 )
 
 const (
@@ -44,12 +44,13 @@ var (
 
 // App owns the lazynote terminal UI state.
 type App struct {
-	store        *notes.Store
-	notes        []notes.Note
-	selected     int
-	detailOffset int
-	activePane   pane
-	status       string
+	store           *notes.Store
+	notes           []notes.Note
+	selected        int
+	detailOffset    int
+	activePane      pane
+	pendingDeleteID string
+	status          string
 }
 
 // New creates a terminal UI app backed by store.
@@ -306,6 +307,7 @@ func (a *App) up(g *gocui.Gui, v *gocui.View) error {
 	if a.selected > 0 {
 		a.selected--
 		a.detailOffset = 0
+		a.pendingDeleteID = ""
 		a.status = ""
 	}
 	return nil
@@ -319,6 +321,7 @@ func (a *App) down(g *gocui.Gui, v *gocui.View) error {
 	if a.selected < len(a.notes)-1 {
 		a.selected++
 		a.detailOffset = 0
+		a.pendingDeleteID = ""
 		a.status = ""
 	}
 	return nil
@@ -326,12 +329,14 @@ func (a *App) down(g *gocui.Gui, v *gocui.View) error {
 
 func (a *App) focusNotes(g *gocui.Gui, v *gocui.View) error {
 	a.activePane = paneNotes
+	a.pendingDeleteID = ""
 	a.status = ""
 	return a.setCurrentView(g)
 }
 
 func (a *App) focusDetail(g *gocui.Gui, v *gocui.View) error {
 	a.activePane = paneDetail
+	a.pendingDeleteID = ""
 	a.status = ""
 	return a.setCurrentView(g)
 }
@@ -360,6 +365,7 @@ func (a *App) scrollDetail(g *gocui.Gui, delta int) error {
 	}
 
 	a.detailOffset += delta
+	a.pendingDeleteID = ""
 	maxOffset := a.clampDetailOffset(v, note)
 	if maxOffset > 0 {
 		a.status = fmt.Sprintf("Scroll %d/%d", a.detailOffset, maxOffset)
@@ -373,6 +379,12 @@ func (a *App) delete(g *gocui.Gui, v *gocui.View) error {
 		return nil
 	}
 
+	if a.pendingDeleteID != note.ID {
+		a.pendingDeleteID = note.ID
+		a.status = fmt.Sprintf("Press d again to delete %q", note.Title)
+		return nil
+	}
+
 	updated, err := a.store.Delete(note.ID)
 	if err != nil {
 		a.status = fmt.Sprintf("Delete failed: %v", err)
@@ -382,6 +394,7 @@ func (a *App) delete(g *gocui.Gui, v *gocui.View) error {
 	a.notes = updated
 	a.clampSelection()
 	a.detailOffset = 0
+	a.pendingDeleteID = ""
 	a.status = fmt.Sprintf("Deleted %q", note.Title)
 	return nil
 }
