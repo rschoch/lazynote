@@ -364,9 +364,8 @@ func (a *App) scrollDetail(g *gocui.Gui, delta int) error {
 		return nil
 	}
 
-	a.detailOffset += delta
-	a.pendingDeleteID = ""
-	maxOffset := a.clampDetailOffset(v, note)
+	width, height := v.Size()
+	maxOffset := a.scrollDetailBy(note, delta, width, height)
 	if maxOffset > 0 {
 		a.status = fmt.Sprintf("Scroll %d/%d", a.detailOffset, maxOffset)
 	}
@@ -414,6 +413,20 @@ func (a *App) clampSelection() {
 
 func (a *App) clampDetailOffset(v *gocui.View, note notes.Note) int {
 	width, height := v.Size()
+	maxOffset := maxDetailOffset(note.Body, width, height)
+	if a.detailOffset < 0 {
+		a.detailOffset = 0
+	}
+	if a.detailOffset > maxOffset {
+		a.detailOffset = maxOffset
+	}
+	return maxOffset
+}
+
+func (a *App) scrollDetailBy(note notes.Note, delta, width, height int) int {
+	a.detailOffset += delta
+	a.pendingDeleteID = ""
+
 	maxOffset := maxDetailOffset(note.Body, width, height)
 	if a.detailOffset < 0 {
 		a.detailOffset = 0

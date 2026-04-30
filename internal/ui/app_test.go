@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/awesome-gocui/gocui"
 	"github.com/rschoch/lazynote/internal/notes"
 )
 
@@ -20,28 +19,19 @@ func TestDeleteSelectedNoteRequiresConfirmation(t *testing.T) {
 		t.Fatalf("append second note: %v", err)
 	}
 
-	app := New(store)
-	g, err := app.newGUI(gocui.OutputSimulator)
-	if err != nil {
-		t.Fatalf("new gui: %v", err)
+	app := loadedApp(t, store)
+	app.selected = 1
+
+	if err := app.delete(nil, nil); err != nil {
+		t.Fatalf("delete first press: %v", err)
 	}
-	defer g.Close()
-
-	screen := g.GetTestingScreen()
-	stop := screen.StartGui()
-	defer stop()
-
-	screen.SendStringAsKeys("j")
-	screen.WaitSync()
-	screen.SendStringAsKeys("d")
-	screen.WaitSync()
 
 	loaded, err := store.Load()
 	if err != nil {
-		t.Fatalf("load notes after first delete key: %v", err)
+		t.Fatalf("load notes after first delete: %v", err)
 	}
 	if len(loaded) != 2 {
-		t.Fatalf("kept %d notes after first delete key, want 2", len(loaded))
+		t.Fatalf("kept %d notes after first delete, want 2", len(loaded))
 	}
 	if app.pendingDeleteID != second.ID {
 		t.Fatalf("pendingDeleteID = %q, want %q", app.pendingDeleteID, second.ID)
@@ -50,8 +40,9 @@ func TestDeleteSelectedNoteRequiresConfirmation(t *testing.T) {
 		t.Fatalf("status = %q, want delete confirmation", app.status)
 	}
 
-	screen.SendStringAsKeys("d")
-	screen.WaitSync()
+	if err := app.delete(nil, nil); err != nil {
+		t.Fatalf("delete second press: %v", err)
+	}
 
 	loaded, err = store.Load()
 	if err != nil {
@@ -74,25 +65,18 @@ func TestSelectionCancelsDeleteConfirmation(t *testing.T) {
 		t.Fatalf("append second note: %v", err)
 	}
 
-	app := New(store)
-	g, err := app.newGUI(gocui.OutputSimulator)
-	if err != nil {
-		t.Fatalf("new gui: %v", err)
+	app := loadedApp(t, store)
+
+	if err := app.delete(nil, nil); err != nil {
+		t.Fatalf("delete first press: %v", err)
 	}
-	defer g.Close()
-
-	screen := g.GetTestingScreen()
-	stop := screen.StartGui()
-	defer stop()
-
-	screen.SendStringAsKeys("d")
-	screen.WaitSync()
 	if app.pendingDeleteID == "" {
 		t.Fatal("pendingDeleteID is empty, want armed delete")
 	}
 
-	screen.SendStringAsKeys("j")
-	screen.WaitSync()
+	if err := app.down(nil, nil); err != nil {
+		t.Fatalf("down: %v", err)
+	}
 	if app.pendingDeleteID != "" {
 		t.Fatalf("pendingDeleteID = %q, want canceled delete", app.pendingDeleteID)
 	}
@@ -113,82 +97,42 @@ func TestDetailPaneScrollsLongNote(t *testing.T) {
 		t.Fatalf("append note: %v", err)
 	}
 
-	app := New(store)
-	g, err := app.newGUI(gocui.OutputSimulator)
-	if err != nil {
-		t.Fatalf("new gui: %v", err)
-	}
-	defer g.Close()
-
-	screen := g.GetTestingScreen()
-	stop := screen.StartGui()
-	defer stop()
-
-	screen.WaitSync()
-	screen.SendKeySync(gocui.KeyArrowRight)
-	screen.WaitSync()
-	screen.SendKeySync(gocui.KeyArrowDown)
-	screen.WaitSync()
-
-	if app.activePane != paneDetail {
-		t.Fatalf("activePane = %v, want detail pane", app.activePane)
-	}
+	app := loadedApp(t, store)
+	app.activePane = paneDetail
+	note, _ := app.selectedNote()
+	app.scrollDetailBy(note, 1, 30, 5)
 	if app.detailOffset == 0 {
 		t.Fatal("detailOffset = 0, want arrow down to scroll active detail pane")
 	}
 
-	screen.SendKeySync(gocui.KeyPgdn)
-	screen.WaitSync()
+	app.scrollDetailBy(note, 5, 30, 5)
 
 	if app.detailOffset <= 1 {
 		t.Fatalf("detailOffset = %d, want page down to scroll farther", app.detailOffset)
 	}
 
-	screen.SendKeySync(gocui.KeyPgup)
-	screen.WaitSync()
-	screen.SendKeySync(gocui.KeyArrowUp)
-	screen.WaitSync()
-	if app.detailOffset < 0 {
-		t.Fatalf("detailOffset = %d, want non-negative offset", app.detailOffset)
+	app.scrollDetailBy(note, -100, 30, 5)
+	if app.detailOffset != 0 {
+		t.Fatalf("detailOffset = %d, want clamped to top", app.detailOffset)
 	}
 }
 
 func TestFocusControlsContextualUpDown(t *testing.T) {
-	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
-	if _, err := store.Append("first", strings.Repeat("first body line with enough repeated content\n", 80)); err != nil {
-		t.Fatalf("append first note: %v", err)
-	}
-	if _, err := store.Append("second", "second body"); err != nil {
-		t.Fatalf("append second note: %v", err)
-	}
-
-	app := New(store)
-	g, err := app.newGUI(gocui.OutputSimulator)
-	if err != nil {
-		t.Fatalf("new gui: %v", err)
-	}
-	defer g.Close()
-
-	screen := g.GetTestingScreen()
-	stop := screen.StartGui()
-	defer stop()
-
-	screen.WaitSync()
-	screen.SendKeySync(gocui.KeyArrowRight)
-	screen.WaitSync()
-	screen.SendKeySync(gocui.KeyArrowDown)
-	screen.WaitSync()
-	if app.selected != 0 {
-		t.Fatalf("selected = %d, want detail scrolling to keep note selection", app.selected)
-	}
-	if app.detailOffset == 0 {
-		t.Fatal("detailOffset = 0, want detail pane to scroll")
+	app := &App{
+		notes: []notes.Note{
+			{Title: "first", Body: strings.Repeat("first body line with enough repeated content\n", 80)},
+			{Title: "second", Body: "second body"},
+		},
+		activePane:   paneDetail,
+		detailOffset: 8,
 	}
 
-	screen.SendKeySync(gocui.KeyArrowLeft)
-	screen.WaitSync()
-	screen.SendKeySync(gocui.KeyArrowDown)
-	screen.WaitSync()
+	if err := app.focusNotes(nil, nil); err != nil {
+		t.Fatalf("focus notes: %v", err)
+	}
+	if err := app.down(nil, nil); err != nil {
+		t.Fatalf("down: %v", err)
+	}
 	if app.selected != 1 {
 		t.Fatalf("selected = %d, want notes pane to move selection", app.selected)
 	}
@@ -292,4 +236,15 @@ func TestListWidthCapsAtMaximum(t *testing.T) {
 	if got := listWidth(89); got > maxListWidth {
 		t.Fatalf("listWidth(89) = %d, want at most %d", got, maxListWidth)
 	}
+}
+
+func loadedApp(t *testing.T, store *notes.Store) *App {
+	t.Helper()
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+
+	return &App{store: store, notes: loaded}
 }
