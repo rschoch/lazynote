@@ -141,5 +141,13 @@ Create a local release snapshot:
 make release-snapshot
 ```
 
-Publishing installable apt/yum/apk repositories or Homebrew taps is a separate
-distribution step after release artifacts exist.
+Tagged releases are built by GitHub Actions:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+GoReleaser publishes archives, checksums, and Linux packages to the GitHub
+Release. Publishing installable apt/yum/apk repositories or Homebrew taps is a
+separate distribution step after release artifacts exist.
