@@ -1,8 +1,15 @@
 # lazynote
 
-Small terminal notes app built with `gocui`.
+`lazynote` is a lightweight terminal notes app for quick personal notes and
+agent-friendly CLI workflows. It has a small `gocui` TUI for browsing notes and
+a scriptable command surface for saving and retrieving context from other tools.
 
 ## Install
+
+Download prebuilt archives and Linux packages from the
+[GitHub Releases](https://github.com/rschoch/lazynote/releases) page. Releases
+include Linux `.deb`, `.rpm`, and `.apk` packages, plus compressed archives for
+Linux, macOS, and Windows.
 
 From source:
 
@@ -23,6 +30,31 @@ choose another root:
 ```sh
 make install PREFIX="$HOME/.local"
 ```
+
+## Scriptable and agent-friendly
+
+`lazynote` is intentionally composable: it can save text from stdin and expose
+saved notes through plain CLI commands. That makes it useful from shell scripts,
+terminal tools, and coding-agent workflows without requiring a tool to drive the
+interactive UI.
+
+Capture generated context:
+
+```sh
+some-command | lazynote "session summary"
+lazynote "release notes" - < release-notes.md
+```
+
+Retrieve saved context later:
+
+```sh
+lazynote list
+lazynote show <id>
+lazynote search packaging
+```
+
+The goal is bidirectional interoperability: humans can browse notes in the TUI,
+while tools can save and retrieve notes through stable text commands.
 
 ## Usage
 
@@ -89,7 +121,7 @@ Keys:
 - `k` / up: move up in the active pane
 - PageDown / Ctrl-D: scroll selected note body down
 - PageUp / Ctrl-U: scroll selected note body up
-- `d` / delete: delete selected note
+- `d` / delete: arm deletion; press `d` again on the same note to confirm
 - `q` / Ctrl-C: quit
 
 Terminal fonts are controlled by your terminal emulator. `lazynote` uses rounded
@@ -144,10 +176,14 @@ make release-snapshot
 Tagged releases are built by GitHub Actions:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 GoReleaser publishes archives, checksums, and Linux packages to the GitHub
 Release. Publishing installable apt/yum/apk repositories or Homebrew taps is a
 separate distribution step after release artifacts exist.
+
+## License
+
+MIT
