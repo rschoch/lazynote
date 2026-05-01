@@ -1,10 +1,11 @@
 package ui
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
-	"time"
 
 	"github.com/awesome-gocui/gocui"
 	"github.com/rschoch/lazynote/internal/notes"
@@ -18,6 +19,7 @@ const (
 	defaultListWidth = 28
 	minListWidth     = 22
 	maxListWidth     = 34
+	statusIcon       = "▤"
 )
 
 type pane int
@@ -36,8 +38,7 @@ var (
 	colorAccent      = gocui.Get256Color(80)
 	colorTitle       = gocui.Get256Color(218)
 	colorWarn        = gocui.Get256Color(215)
-	colorStatusBg    = gocui.Get256Color(235)
-	colorStatusFg    = gocui.Get256Color(252)
+	colorStatusFg    = colorMuted
 	colorSelectionBg = gocui.Get256Color(79)
 	colorSelectionFg = gocui.Get256Color(234)
 )
@@ -51,7 +52,17 @@ type App struct {
 	activePane      pane
 	pendingDeleteID string
 	status          string
+	statusMode      statusMode
+	copyText        func(string) error
 }
+
+type statusMode int
+
+const (
+	statusDefault statusMode = iota
+	statusDeleteArmed
+	statusMessage
+)
 
 // New creates a terminal UI app backed by store.
 func New(store *notes.Store) *App {
@@ -109,19 +120,14 @@ func (a *App) keybindings(g *gocui.Gui) error {
 	}{
 		{"", 'q', quit},
 		{"", gocui.KeyCtrlC, quit},
-		{"", 'j', a.down},
 		{"", gocui.KeyArrowDown, a.down},
-		{"", 'k', a.up},
 		{"", gocui.KeyArrowUp, a.up},
+		{"", 'c', a.copy},
 		{"", 'd', a.delete},
 		{"", gocui.KeyDelete, a.delete},
 		{"", gocui.KeyPgdn, a.detailDown},
-		{"", gocui.KeyCtrlD, a.detailDown},
 		{"", gocui.KeyPgup, a.detailUp},
-		{"", gocui.KeyCtrlU, a.detailUp},
-		{"", 'h', a.focusNotes},
 		{"", gocui.KeyArrowLeft, a.focusNotes},
-		{"", 'l', a.focusDetail},
 		{"", gocui.KeyArrowRight, a.focusDetail},
 	}
 
@@ -136,19 +142,21 @@ func (a *App) keybindings(g *gocui.Gui) error {
 
 func (a *App) layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
-	if maxX < 20 || maxY < 5 {
+	if maxX < 20 || maxY < 8 {
 		return a.layoutSmall(g, maxX, maxY)
 	}
 
 	leftWidth := listWidth(maxX)
+	statusTop := maxY - 2
+	paneBottom := statusTop
 
-	if err := a.layoutNotes(g, 0, 0, leftWidth, maxY-2); err != nil {
+	if err := a.layoutNotes(g, 0, 0, leftWidth, paneBottom); err != nil {
 		return err
 	}
-	if err := a.layoutDetail(g, leftWidth+1, 0, maxX-1, maxY-2); err != nil {
+	if err := a.layoutDetail(g, leftWidth+1, 0, maxX-1, paneBottom); err != nil {
 		return err
 	}
-	if err := a.layoutStatus(g, 0, maxY-2, maxX-1, maxY-1); err != nil {
+	if err := a.layoutStatus(g, -1, statusTop, maxX, maxY); err != nil {
 		return err
 	}
 
@@ -249,8 +257,7 @@ func (a *App) layoutStatus(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	}
 
 	v.Frame = false
-	v.BgColor = colorStatusBg
-	v.FgColor = colorStatusFg | gocui.AttrBold
+	v.FgColor = colorStatusFg
 	v.Clear()
 
 	width, _ := v.Size()
@@ -260,18 +267,38 @@ func (a *App) layoutStatus(g *gocui.Gui, x0, y0, x1, y1 int) error {
 }
 
 func (a *App) statusLine() string {
-	status := a.status
-	if status == "" {
-		status = "● notes 0"
-		if note, ok := a.selectedNote(); ok {
-			status = fmt.Sprintf("● %s  %d/%d  %s", a.activePaneLabel(), a.selected+1, len(a.notes), note.CreatedAt.Local().Format(time.RFC1123))
-			if a.activePane == paneDetail && a.detailOffset > 0 {
-				status = fmt.Sprintf("%s  scroll +%d", status, a.detailOffset)
-			}
-		}
+	return fmt.Sprintf(" %s   %s ", a.statusText(), a.statusHints())
+}
+
+func (a *App) statusText() string {
+	if a.status != "" {
+		return a.status
 	}
 
-	return fmt.Sprintf(" %s   ←/→ focus   ↑/↓ j/k move/scroll   pg page   d delete   q quit ", status)
+	status := statusIcon + " 0/0"
+	if _, ok := a.selectedNote(); ok {
+		status = fmt.Sprintf("%s %d/%d", statusIcon, a.selected+1, len(a.notes))
+		if a.activePane == paneDetail && a.detailOffset > 0 {
+			status = fmt.Sprintf("%s  scroll +%d", status, a.detailOffset)
+		}
+	}
+	return status
+}
+
+func (a *App) statusHints() string {
+	switch a.statusMode {
+	case statusDeleteArmed:
+		return "d confirm   arrows cancel   q quit"
+	}
+
+	if _, ok := a.selectedNote(); !ok {
+		return "q quit"
+	}
+
+	if a.activePane == paneDetail {
+		return "↑/↓ scroll   pg page   ← list   c copy body   q quit"
+	}
+	return "↑/↓ select   → body   c copy title   d delete   q quit"
 }
 
 func (a *App) syncListCursor(v *gocui.View) {
@@ -312,6 +339,7 @@ func (a *App) up(g *gocui.Gui, v *gocui.View) error {
 		a.detailOffset = 0
 		a.pendingDeleteID = ""
 		a.status = ""
+		a.statusMode = statusDefault
 	}
 	return nil
 }
@@ -326,6 +354,7 @@ func (a *App) down(g *gocui.Gui, v *gocui.View) error {
 		a.detailOffset = 0
 		a.pendingDeleteID = ""
 		a.status = ""
+		a.statusMode = statusDefault
 	}
 	return nil
 }
@@ -334,6 +363,7 @@ func (a *App) focusNotes(g *gocui.Gui, v *gocui.View) error {
 	a.activePane = paneNotes
 	a.pendingDeleteID = ""
 	a.status = ""
+	a.statusMode = statusDefault
 	return a.setCurrentView(g)
 }
 
@@ -341,6 +371,7 @@ func (a *App) focusDetail(g *gocui.Gui, v *gocui.View) error {
 	a.activePane = paneDetail
 	a.pendingDeleteID = ""
 	a.status = ""
+	a.statusMode = statusDefault
 	return a.setCurrentView(g)
 }
 
@@ -371,6 +402,7 @@ func (a *App) scrollDetail(g *gocui.Gui, delta int) error {
 	maxOffset := a.scrollDetailBy(note, delta, width, height)
 	if maxOffset > 0 {
 		a.status = fmt.Sprintf("Scroll %d/%d", a.detailOffset, maxOffset)
+		a.statusMode = statusMessage
 	}
 	return nil
 }
@@ -384,12 +416,14 @@ func (a *App) delete(g *gocui.Gui, v *gocui.View) error {
 	if a.pendingDeleteID != note.ID {
 		a.pendingDeleteID = note.ID
 		a.status = fmt.Sprintf("Press d again to delete %q", note.Title)
+		a.statusMode = statusDeleteArmed
 		return nil
 	}
 
 	updated, err := a.store.Delete(note.ID)
 	if err != nil {
 		a.status = fmt.Sprintf("Delete failed: %v", err)
+		a.statusMode = statusMessage
 		return nil
 	}
 
@@ -398,6 +432,35 @@ func (a *App) delete(g *gocui.Gui, v *gocui.View) error {
 	a.detailOffset = 0
 	a.pendingDeleteID = ""
 	a.status = fmt.Sprintf("Deleted %q", note.Title)
+	a.statusMode = statusMessage
+	return nil
+}
+
+func (a *App) copy(g *gocui.Gui, v *gocui.View) error {
+	note, ok := a.selectedNote()
+	if !ok {
+		a.pendingDeleteID = ""
+		a.status = "Nothing to copy"
+		a.statusMode = statusMessage
+		return nil
+	}
+
+	label := "title"
+	text := note.Title
+	if a.activePane == paneDetail {
+		label = "body"
+		text = note.Body
+	}
+
+	a.pendingDeleteID = ""
+	if err := a.writeClipboard(text); err != nil {
+		a.status = fmt.Sprintf("Copy failed: %v", err)
+		a.statusMode = statusMessage
+		return nil
+	}
+
+	a.status = fmt.Sprintf("Copied %s", label)
+	a.statusMode = statusMessage
 	return nil
 }
 
@@ -429,6 +492,10 @@ func (a *App) clampDetailOffset(v *gocui.View, note notes.Note) int {
 func (a *App) scrollDetailBy(note notes.Note, delta, width, height int) int {
 	a.detailOffset += delta
 	a.pendingDeleteID = ""
+	if a.statusMode == statusDeleteArmed {
+		a.status = ""
+		a.statusMode = statusDefault
+	}
 
 	maxOffset := maxDetailOffset(note.Body, width, height)
 	if a.detailOffset < 0 {
@@ -442,6 +509,28 @@ func (a *App) scrollDetailBy(note notes.Note, delta, width, height int) int {
 
 func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
+}
+
+func (a *App) writeClipboard(text string) error {
+	if a.copyText != nil {
+		return a.copyText(text)
+	}
+	return writeOSC52Clipboard(text)
+}
+
+func writeOSC52Clipboard(text string) error {
+	encoded := base64.StdEncoding.EncodeToString([]byte(text))
+	sequence := "\x1b]52;c;" + encoded + "\a"
+
+	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+	if err == nil {
+		defer tty.Close()
+		_, err = tty.WriteString(sequence)
+		return err
+	}
+
+	_, err = os.Stdout.WriteString(sequence)
+	return err
 }
 
 func (a *App) setCurrentView(g *gocui.Gui) error {
@@ -465,13 +554,6 @@ func (a *App) paneTitleColor(p pane) gocui.Attribute {
 		return colorTitle | gocui.AttrBold
 	}
 	return colorMuted
-}
-
-func (a *App) activePaneLabel() string {
-	if a.activePane == paneDetail {
-		return "note"
-	}
-	return "notes"
 }
 
 func (p pane) viewName() string {

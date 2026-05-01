@@ -35,7 +35,7 @@ Installer options:
 
 ```sh
 sh install.sh --dir /usr/local/bin
-sh install.sh --version v0.1.0
+sh install.sh --version vX.Y.Z
 ```
 
 Uninstall a script-installed binary:
@@ -131,19 +131,22 @@ lazynote
 ```
 
 The TUI shows note titles on the left and the selected note body on the right.
+The bottom status line shows context-specific key hints.
 
 Keys:
 
-- left / `h`: focus note list
-- right / `l`: focus note body
-- `j` / down: move or scroll down in the active pane
-- `k` / up: move or scroll up in the active pane
-- PageDown / Ctrl-D: scroll note body down
-- PageUp / Ctrl-U: scroll note body up
+- left: focus note list
+- right: focus note body
+- down: move or scroll down in the active pane
+- up: move or scroll up in the active pane
+- PageDown: scroll note body down
+- PageUp: scroll note body up
+- `c`: copy the selected title or note body
 - `d` / delete: arm deletion; press `d` again to confirm
 - `q` / Ctrl-C: quit
 
-Terminal fonts, glyph rendering, and colors depend on your terminal emulator.
+Copy uses terminal clipboard support. Fonts, glyph rendering, and colors depend
+on your terminal emulator.
 
 ## Storage
 
@@ -233,8 +236,8 @@ make release-snapshot
 Publish a tagged release:
 
 ```sh
-git tag v0.1.1
-git push origin v0.1.1
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 GitHub Actions runs tests and publishes release artifacts. Publishing apt/yum/apk

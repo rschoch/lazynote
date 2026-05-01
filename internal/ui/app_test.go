@@ -159,16 +159,20 @@ func TestSelectionResetsDetailScroll(t *testing.T) {
 }
 
 func TestStatusLineIncludesPositionAndKeys(t *testing.T) {
+	createdAt := time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)
 	app := &App{
 		notes: []notes.Note{
-			{Title: "one", CreatedAt: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)},
-			{Title: "two", CreatedAt: time.Date(2026, 4, 30, 13, 0, 0, 0, time.UTC)},
+			{Title: "one", CreatedAt: createdAt},
+			{Title: "two", CreatedAt: createdAt.Add(time.Hour)},
 		},
 		selected: 1,
 	}
 
 	got := app.statusLine()
-	for _, want := range []string{"notes", "2/2", "←/→ focus", "j/k move/scroll", "d delete", "q quit"} {
+	if strings.Contains(got, "2026") {
+		t.Fatalf("statusLine() = %q, want no selected-note timestamp", got)
+	}
+	for _, want := range []string{"2/2", "↑/↓ select", "→ body", "c copy title", "d delete", "q quit"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
@@ -179,7 +183,7 @@ func TestStatusLineIncludesEmptyState(t *testing.T) {
 	app := &App{}
 
 	got := app.statusLine()
-	for _, want := range []string{"notes 0", "←/→ focus", "q quit"} {
+	for _, want := range []string{"0/0", "q quit"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
@@ -196,10 +200,99 @@ func TestStatusLineIncludesDetailScrollOffset(t *testing.T) {
 	}
 
 	got := app.statusLine()
-	for _, want := range []string{"note", "1/1", "scroll +4"} {
+	for _, want := range []string{"1/1", "scroll +4", "↑/↓ scroll", "pg page", "← list", "c copy body"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
+	}
+}
+
+func TestStatusLineIncludesDeleteConfirmationHints(t *testing.T) {
+	app := &App{
+		status:     "Press d again to delete \"one\"",
+		statusMode: statusDeleteArmed,
+	}
+
+	got := app.statusLine()
+	for _, want := range []string{"Press d again", "d confirm", "arrows cancel", "q quit"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("statusLine() = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestStatusLineIncludesMessageHints(t *testing.T) {
+	app := &App{
+		notes: []notes.Note{
+			{Title: "one", Body: "body"},
+		},
+		status:     "Deleted \"one\"",
+		statusMode: statusMessage,
+	}
+
+	got := app.statusLine()
+	for _, want := range []string{"Deleted", "↑/↓ select", "→ body", "c copy title", "q quit"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("statusLine() = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestCopyCopiesTitleFromNotesPane(t *testing.T) {
+	var copied string
+	app := &App{
+		notes: []notes.Note{
+			{Title: "release plan", Body: "ship packages"},
+		},
+		copyText: func(text string) error {
+			copied = text
+			return nil
+		},
+	}
+
+	if err := app.copy(nil, nil); err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if copied != "release plan" {
+		t.Fatalf("copied = %q, want title", copied)
+	}
+	if app.status != "Copied title" {
+		t.Fatalf("status = %q, want copied title", app.status)
+	}
+}
+
+func TestCopyCopiesBodyFromDetailPane(t *testing.T) {
+	var copied string
+	app := &App{
+		notes: []notes.Note{
+			{Title: "release plan", Body: "ship packages"},
+		},
+		activePane: paneDetail,
+		copyText: func(text string) error {
+			copied = text
+			return nil
+		},
+	}
+
+	if err := app.copy(nil, nil); err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if copied != "ship packages" {
+		t.Fatalf("copied = %q, want body", copied)
+	}
+	if app.status != "Copied body" {
+		t.Fatalf("status = %q, want copied body", app.status)
+	}
+}
+
+func TestCopyHandlesEmptyNotes(t *testing.T) {
+	app := &App{}
+
+	if err := app.copy(nil, nil); err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if app.status != "Nothing to copy" {
+		t.Fatalf("status = %q, want nothing to copy", app.status)
 	}
 }
 
