@@ -42,15 +42,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	var opts runOptions
 	args, opts = parseGlobalOptions(args)
 
-	if len(args) > 0 {
-		switch args[0] {
-		case "--help", "-h", "help":
-			printUsage(stdout)
-			return nil
-		case "--version", "-v", "version":
-			fmt.Fprintln(stdout, versionString())
-			return nil
-		}
+	if handled, err := runMetaCommand(args, stdout); handled || err != nil {
+		return err
 	}
 
 	path, err := notes.DefaultPath()
@@ -59,21 +52,54 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	store := notes.NewStore(path)
 
-	if len(args) > 0 && !opts.literalAppend {
-		switch args[0] {
-		case "list":
-			return runList(store, args[1:], stdout)
-		case "show":
-			return runShow(store, args[1:], stdout)
-		case "search":
-			return runSearch(store, args[1:], stdout)
-		case "path":
-			return runPath(store, args[1:], stdout)
-		case "export":
-			return runExport(store, args[1:], stdout)
+	if !opts.literalAppend {
+		if handled, err := runStoreCommand(store, args, stdout); handled || err != nil {
+			return err
 		}
 	}
 
+	return runAppendOrTUI(store, args, stdin, stdout, opts)
+}
+
+func runMetaCommand(args []string, stdout io.Writer) (bool, error) {
+	if len(args) == 0 {
+		return false, nil
+	}
+
+	switch args[0] {
+	case "--help", "-h", "help":
+		printUsage(stdout)
+		return true, nil
+	case "--version", "-v", "version":
+		fmt.Fprintln(stdout, versionString())
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+func runStoreCommand(store *notes.Store, args []string, stdout io.Writer) (bool, error) {
+	if len(args) == 0 {
+		return false, nil
+	}
+
+	switch args[0] {
+	case "list":
+		return true, runList(store, args[1:], stdout)
+	case "show":
+		return true, runShow(store, args[1:], stdout)
+	case "search":
+		return true, runSearch(store, args[1:], stdout)
+	case "path":
+		return true, runPath(store, args[1:], stdout)
+	case "export":
+		return true, runExport(store, args[1:], stdout)
+	default:
+		return false, nil
+	}
+}
+
+func runAppendOrTUI(store *notes.Store, args []string, stdin io.Reader, stdout io.Writer, opts runOptions) error {
 	title, body, appendNote, err := noteInput(args, stdin)
 	if err != nil {
 		return err
