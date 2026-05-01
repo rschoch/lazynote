@@ -1,10 +1,9 @@
 # lazynote
 
-`lazynote` is a lightweight terminal notes app for quick capture and later
-retrieval. It has a small `gocui` TUI for humans and a plain CLI surface for
-shell scripts, coding agents, and other terminal tools.
+`lazynote` is a terminal-native note system designed for scriptable, agent-driven workflows. 
+It provides a fast TUI for humans and a stable CLI interface for shell scripts, coding agents, and other terminal tools.
 
-Notes are stored locally as JSON. No server, database, or Go toolchain is needed
+Notes are stored locally as JSON—no server, database, or Go toolchain required 
 to run the released binary.
 
 ![lazynote TUI screenshot](assets/screenshot.png)
