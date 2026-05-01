@@ -1,10 +1,36 @@
 # lazynote
 
-`lazynote` is a terminal-native note system designed for scriptable, agent-driven workflows. 
-It provides a fast TUI for humans and a stable CLI interface for shell scripts, coding agents, and other terminal tools.
+`lazynote` is a local, terminal-first notes app for developer workflows.
 
-Notes are stored locally as JSON—no server, database, or Go toolchain required 
-to run the released binary.
+Take notes instantly from the CLI, browse them in a small TUI, and expose the
+same notes to shell scripts, terminal tools, and coding agents. It is built for
+quick context capture without an account, server, database, or sync service.
+
+Notes are stored locally as JSON. The released binary does not require a Go
+toolchain.
+
+## Why lazynote?
+
+- Capture notes from arguments, stdin, and shell pipelines.
+- Retrieve context with plain commands such as `list`, `show`, `search`, and
+  `export`.
+- Share one local notes file between humans, scripts, and coding agents.
+- Browse notes in a fast terminal UI when you want a human view.
+
+## Quick Example
+
+```sh
+# take simple note: $ lazynote <title> <body>
+lazynote showerthought 'Pavlov probably thought about feeding his dogs every time someone rang a bell.'
+
+# piped body with an inferred title
+printf '## Session abc123\n- fixed flaky test\n' | lazynote
+
+# retrieve context
+lazynote list
+lazynote search flaky
+lazynote export json
+```
 
 ![lazynote TUI screenshot](assets/screenshot.png)
 
