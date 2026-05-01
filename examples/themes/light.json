@@ -1,0 +1,15 @@
+{
+  "theme": "default",
+  "themeOverrides": {
+    "defaultBgColor": ["#f8fafc"],
+    "defaultFgColor": ["#1f2937"],
+    "mutedFgColor": ["#6b7280"],
+    "activeBorderColor": ["#2563eb", "bold"],
+    "inactiveBorderColor": ["#d1d5db"],
+    "titleColor": ["#7c3aed", "bold"],
+    "warningColor": ["#b45309", "bold"],
+    "statusFgColor": ["#4b5563"],
+    "selectedLineBgColor": ["#dbeafe"],
+    "selectedLineFgColor": ["#111827", "bold"]
+  }
+}

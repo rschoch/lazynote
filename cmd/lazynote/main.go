@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/rschoch/lazynote/internal/config"
 	"github.com/rschoch/lazynote/internal/notes"
 	"github.com/rschoch/lazynote/internal/ui"
 )
@@ -78,7 +79,11 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 	if !appendNote {
-		return ui.New(store).Run()
+		theme, err := config.LoadTheme()
+		if err != nil {
+			return err
+		}
+		return ui.New(store, ui.WithTheme(theme)).Run()
 	}
 	if _, err := store.Append(title, body); err != nil {
 		return err

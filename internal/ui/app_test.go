@@ -297,21 +297,22 @@ func TestCopyHandlesEmptyNotes(t *testing.T) {
 }
 
 func TestPaneColorsFollowActivePane(t *testing.T) {
+	theme := DefaultTheme()
 	app := &App{}
-	if app.paneFrameColor(paneNotes) != colorAccent {
+	if app.paneFrameColor(paneNotes) != theme.ActiveBorder {
 		t.Fatal("notes pane should be active by default")
 	}
-	if app.paneFrameColor(paneDetail) != colorFrame {
+	if app.paneFrameColor(paneDetail) != theme.InactiveBorder {
 		t.Fatal("detail pane should be inactive by default")
 	}
 
 	if err := app.focusDetail(nil, nil); err != nil {
 		t.Fatalf("focus detail: %v", err)
 	}
-	if app.paneFrameColor(paneDetail) != colorAccent {
+	if app.paneFrameColor(paneDetail) != theme.ActiveBorder {
 		t.Fatal("detail pane should be active after focus")
 	}
-	if app.paneFrameColor(paneNotes) != colorFrame {
+	if app.paneFrameColor(paneNotes) != theme.InactiveBorder {
 		t.Fatal("notes pane should be inactive after detail focus")
 	}
 }

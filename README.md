@@ -173,6 +173,17 @@ Keys:
 Copy uses terminal clipboard support. Fonts, glyph rendering, and colors depend
 on your terminal emulator.
 
+### Themes
+
+The TUI includes `default`, `mono`, and `high-contrast` themes:
+
+```sh
+LAZYNOTE_THEME=mono lazynote
+```
+
+Custom theme overrides are configured in `~/.config/lazynote/config.json`.
+See [THEMING.md](THEMING.md) for the full format and examples.
+
 ## Storage
 
 Default notes file:

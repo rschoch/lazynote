@@ -31,21 +31,12 @@ const (
 
 var (
 	roundedFrameRunes = []rune{'─', '│', '╭', '╮', '╰', '╯', '├', '┤', '┬', '┴', '┼'}
-
-	colorText        = gocui.Get256Color(252)
-	colorMuted       = gocui.Get256Color(248)
-	colorFrame       = gocui.Get256Color(66)
-	colorAccent      = gocui.Get256Color(80)
-	colorTitle       = gocui.Get256Color(218)
-	colorWarn        = gocui.Get256Color(215)
-	colorStatusFg    = colorMuted
-	colorSelectionBg = gocui.Get256Color(79)
-	colorSelectionFg = gocui.Get256Color(234)
 )
 
 // App owns the lazynote terminal UI state.
 type App struct {
 	store           *notes.Store
+	theme           Theme
 	notes           []notes.Note
 	selected        int
 	detailOffset    int
@@ -64,14 +55,28 @@ const (
 	statusMessage
 )
 
+// Option configures an App.
+type Option func(*App)
+
+// WithTheme sets the terminal UI theme.
+func WithTheme(theme Theme) Option {
+	return func(a *App) {
+		a.theme = theme
+	}
+}
+
 // New creates a terminal UI app backed by store.
-func New(store *notes.Store) *App {
-	return &App{store: store}
+func New(store *notes.Store, opts ...Option) *App {
+	app := &App{store: store, theme: DefaultTheme()}
+	for _, opt := range opts {
+		opt(app)
+	}
+	return app
 }
 
 // Run starts the terminal UI.
 func (a *App) Run() error {
-	g, err := a.newGUI(gocui.Output256)
+	g, err := a.newGUI(gocui.OutputTrue)
 	if err != nil {
 		return err
 	}
@@ -99,9 +104,12 @@ func (a *App) newGUI(mode gocui.OutputMode) (*gocui.Gui, error) {
 
 	g.Cursor = false
 	g.Highlight = false
-	g.FgColor = colorText
-	g.FrameColor = colorFrame
-	g.SelFrameColor = colorAccent
+	theme := a.themeColors()
+	g.BgColor = theme.DefaultBg
+	g.FgColor = theme.DefaultFg
+	g.FrameColor = theme.InactiveBorder
+	g.SelFgColor = theme.Title
+	g.SelFrameColor = theme.ActiveBorder
 	g.SetManagerFunc(a.layout)
 
 	if err := a.keybindings(g); err != nil {
@@ -164,14 +172,16 @@ func (a *App) layout(g *gocui.Gui) error {
 }
 
 func (a *App) layoutSmall(g *gocui.Gui, maxX, maxY int) error {
+	theme := a.themeColors()
 	v, err := g.SetView(statusView, 0, 0, maxX-1, maxY-1, 0)
 	if err != nil && !errors.Is(err, gocui.ErrUnknownView) {
 		return err
 	}
 
 	v.Title = " lazynote "
-	v.TitleColor = colorTitle | gocui.AttrBold
-	v.FrameColor = colorWarn
+	v.BgColor = theme.DefaultBg
+	v.TitleColor = theme.Title
+	v.FrameColor = theme.Warning
 	v.FrameRunes = roundedFrameRunes
 	v.Wrap = true
 	v.Clear()
@@ -180,6 +190,7 @@ func (a *App) layoutSmall(g *gocui.Gui, maxX, maxY int) error {
 }
 
 func (a *App) layoutNotes(g *gocui.Gui, x0, y0, x1, y1 int) error {
+	theme := a.themeColors()
 	v, err := g.SetView(notesView, x0, y0, x1, y1, 0)
 	if err != nil && !errors.Is(err, gocui.ErrUnknownView) {
 		return err
@@ -190,14 +201,15 @@ func (a *App) layoutNotes(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	v.TitleColor = a.paneTitleColor(paneNotes)
 	v.FrameColor = a.paneFrameColor(paneNotes)
 	v.FrameRunes = roundedFrameRunes
-	v.FgColor = colorText
+	v.BgColor = theme.DefaultBg
+	v.FgColor = theme.DefaultFg
 	v.Highlight = a.activePane == paneNotes
-	v.SelBgColor = colorSelectionBg
-	v.SelFgColor = colorSelectionFg
+	v.SelBgColor = theme.SelectedLineBg
+	v.SelFgColor = theme.SelectedLineFg
 	v.Clear()
 
 	if len(a.notes) == 0 {
-		v.FgColor = colorMuted
+		v.FgColor = theme.MutedFg
 		fmt.Fprintln(v, "No notes yet")
 		_ = v.SetOrigin(0, 0)
 		_ = v.SetCursor(0, 0)
@@ -218,6 +230,7 @@ func (a *App) layoutNotes(g *gocui.Gui, x0, y0, x1, y1 int) error {
 }
 
 func (a *App) layoutDetail(g *gocui.Gui, x0, y0, x1, y1 int) error {
+	theme := a.themeColors()
 	v, err := g.SetView(detailView, x0, y0, x1, y1, 0)
 	if err != nil && !errors.Is(err, gocui.ErrUnknownView) {
 		return err
@@ -227,7 +240,8 @@ func (a *App) layoutDetail(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	v.TitleColor = a.paneTitleColor(paneDetail)
 	v.FrameColor = a.paneFrameColor(paneDetail)
 	v.FrameRunes = roundedFrameRunes
-	v.FgColor = colorText
+	v.BgColor = theme.DefaultBg
+	v.FgColor = theme.DefaultFg
 	v.Clear()
 
 	note, ok := a.selectedNote()
@@ -235,7 +249,7 @@ func (a *App) layoutDetail(g *gocui.Gui, x0, y0, x1, y1 int) error {
 		v.Title = " Note "
 		v.Subtitle = ""
 		a.detailOffset = 0
-		v.FgColor = colorMuted
+		v.FgColor = theme.MutedFg
 		fmt.Fprintln(v, "Nothing saved yet.")
 		return nil
 	}
@@ -251,13 +265,15 @@ func (a *App) layoutDetail(g *gocui.Gui, x0, y0, x1, y1 int) error {
 }
 
 func (a *App) layoutStatus(g *gocui.Gui, x0, y0, x1, y1 int) error {
+	theme := a.themeColors()
 	v, err := g.SetView(statusView, x0, y0, x1, y1, 0)
 	if err != nil && !errors.Is(err, gocui.ErrUnknownView) {
 		return err
 	}
 
 	v.Frame = false
-	v.FgColor = colorStatusFg
+	v.BgColor = theme.DefaultBg
+	v.FgColor = theme.StatusFg
 	v.Clear()
 
 	width, _ := v.Size()
@@ -542,18 +558,27 @@ func (a *App) setCurrentView(g *gocui.Gui) error {
 	return err
 }
 
-func (a *App) paneFrameColor(p pane) gocui.Attribute {
-	if a.activePane == p {
-		return colorAccent
+func (a *App) themeColors() Theme {
+	if a.theme == (Theme{}) {
+		return DefaultTheme()
 	}
-	return colorFrame
+	return a.theme
+}
+
+func (a *App) paneFrameColor(p pane) gocui.Attribute {
+	theme := a.themeColors()
+	if a.activePane == p {
+		return theme.ActiveBorder
+	}
+	return theme.InactiveBorder
 }
 
 func (a *App) paneTitleColor(p pane) gocui.Attribute {
+	theme := a.themeColors()
 	if a.activePane == p {
-		return colorTitle | gocui.AttrBold
+		return theme.Title
 	}
-	return colorMuted
+	return theme.MutedFg
 }
 
 func (p pane) viewName() string {
