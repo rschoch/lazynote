@@ -172,6 +172,15 @@ Claude Code, plugin layout provided but not yet verified by this project:
 /reload-plugins
 ```
 
+Once the `lazynote` plugin is installed, you can ask an agent to persist or
+retrieve project context:
+
+```text
+Use lazynote to save the proposed implementation plan.
+Search lazynote for notes about release packaging.
+Save a summary of this debugging session to lazynote.
+```
+
 ## TUI
 
 Open the terminal UI:
