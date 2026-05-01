@@ -228,7 +228,7 @@ func (a *App) layoutDetail(g *gocui.Gui, x0, y0, x1, y1 int) error {
 		v.Subtitle = ""
 		a.detailOffset = 0
 		v.FgColor = colorMuted
-		fmt.Fprintln(v, "Select or add a note to see its body.")
+		fmt.Fprintln(v, "Nothing saved yet.")
 		return nil
 	}
 
@@ -262,9 +262,12 @@ func (a *App) layoutStatus(g *gocui.Gui, x0, y0, x1, y1 int) error {
 func (a *App) statusLine() string {
 	status := a.status
 	if status == "" {
-		status = "● ready"
+		status = "● notes 0"
 		if note, ok := a.selectedNote(); ok {
 			status = fmt.Sprintf("● %s  %d/%d  %s", a.activePaneLabel(), a.selected+1, len(a.notes), note.CreatedAt.Local().Format(time.RFC1123))
+			if a.activePane == paneDetail && a.detailOffset > 0 {
+				status = fmt.Sprintf("%s  scroll +%d", status, a.detailOffset)
+			}
 		}
 	}
 

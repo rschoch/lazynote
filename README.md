@@ -1,52 +1,53 @@
 # lazynote
 
-`lazynote` is a lightweight terminal notes app for quick personal notes and
-agent-friendly CLI workflows. It has a small `gocui` TUI for browsing notes and
-a scriptable command surface for saving and retrieving context from other tools.
+`lazynote` is a lightweight terminal notes app for quick capture and later
+retrieval. It has a small `gocui` TUI for humans and a plain CLI surface for
+shell scripts, coding agents, and other terminal tools.
+
+Notes are stored locally as JSON. No server, database, or Go toolchain is needed
+to run the released binary.
 
 ## Install
 
-Recommended install for Linux and macOS:
+Recommended for Linux and macOS:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/rschoch/lazynote/main/install.sh | sh
 ```
 
-The installer downloads the latest release for your OS and architecture, checks
-the release checksum when `sha256sum` or `shasum` is available, and installs the
-binary to `~/.local/bin`.
+The installer downloads the latest release, verifies checksums when possible,
+and installs `lazynote` to `~/.local/bin`.
 
-If `lazynote` is not found after installation, add the install directory to your
-`PATH`:
+If your shell cannot find it:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-To inspect the script first:
+Inspect the installer first:
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/rschoch/lazynote/main/install.sh
 sh install.sh
 ```
 
-You can choose another directory or pin a version:
+Installer options:
 
 ```sh
 sh install.sh --dir /usr/local/bin
 sh install.sh --version v0.1.0
 ```
 
-System directories such as `/usr/local/bin` may require `sudo`.
+Uninstall a script-installed binary:
 
-Prebuilt archives and Linux packages are also available from the
-[GitHub Releases](https://github.com/rschoch/lazynote/releases) page, including
-`.deb`, `.rpm`, and `.apk` packages. Download a package and install it with your
-system package manager, for example `sudo apt install ./lazynote_0.1.0_amd64.deb`.
+```sh
+rm -f ~/.local/bin/lazynote
+```
 
-The installer and direct package downloads do not add an apt/yum/apk repository
-yet, so your system package manager will not discover future `lazynote` updates
-automatically.
+Prebuilt archives and Linux `.deb`, `.rpm`, and `.apk` packages are available on
+the [GitHub Releases](https://github.com/rschoch/lazynote/releases) page. Direct
+downloads do not add an apt/yum/apk repository, so package-manager auto-updates
+are not configured yet.
 
 From source:
 
@@ -61,28 +62,42 @@ make build
 make install
 ```
 
-`make install` writes the binary to `/usr/local/bin` by default. Set `PREFIX` to
-choose another root:
+`make install` uses `/usr/local` by default. Use `PREFIX` for another root:
 
 ```sh
 make install PREFIX="$HOME/.local"
 ```
 
-## Scriptable and agent-friendly
+## CLI Workflows
 
-`lazynote` is intentionally composable: it can save text from stdin and expose
-saved notes through plain CLI commands. That makes it useful from shell scripts,
-terminal tools, and coding-agent workflows without requiring a tool to drive the
-interactive UI.
-
-Capture generated context:
+Capture a note:
 
 ```sh
-some-command | lazynote "session summary"
-lazynote "release notes" - < release-notes.md
+lazynote mytitle "my note on something i shouldnt forget"
 ```
 
-Retrieve saved context later:
+Capture from stdin:
+
+```sh
+echo "my note from another command" | lazynote mytitle
+cat summary.md | lazynote "session summary"
+lazynote "session summary" - < summary.md
+```
+
+If stdin is piped without a title, the first non-empty line becomes the title:
+
+```sh
+printf '## Session abc123\n- shipped release prep\n' | lazynote
+```
+
+Suppress success output for scripts and agents:
+
+```sh
+some-command | lazynote --quiet "session summary"
+lazynote --quiet mytitle "body"
+```
+
+Retrieve context:
 
 ```sh
 lazynote list
@@ -91,72 +106,20 @@ lazynote show --body <id>
 lazynote search packaging
 lazynote export markdown
 lazynote export json
-```
-
-The goal is bidirectional interoperability: humans can browse notes in the TUI,
-while tools can save and retrieve notes through stable text commands.
-
-## Usage
-
-Add a note:
-
-```sh
-lazynote mytitle "my note on something i shouldnt forget to do later"
-```
-
-Add a note from stdin:
-
-```sh
-echo "my note from another command" | lazynote mytitle
-cat summary.md | lazynote "session summary"
-lazynote "session summary" - < summary.md
-```
-
-If stdin is piped without a title, `lazynote` uses the first non-empty line as
-the title:
-
-```sh
-printf '## Session abc123\n- shipped release prep\n' | lazynote
-```
-
-List saved notes:
-
-```sh
-lazynote list
-```
-
-`list` prints tab-separated `id`, `created_at`, and `title` fields. Use the ID
-to print a full note:
-
-```sh
-lazynote show <id>
-```
-
-`show` also accepts a unique ID prefix. Print only the note body:
-
-```sh
-lazynote show --body <id>
-```
-
-Search note titles and bodies:
-
-```sh
-lazynote search packaging
-lazynote search "session summary"
-```
-
-Print the notes file path:
-
-```sh
 lazynote path
 ```
 
-Export all notes:
+`list` prints tab-separated `id`, `created_at`, and `title` fields. `show`
+accepts a full ID or a unique ID prefix.
+
+Command words such as `list`, `show`, `search`, `path`, and `export` are
+reserved when they are the first argument. Use `--` to use one as a title:
 
 ```sh
-lazynote export markdown > lazynote-notes.md
-lazynote export json > lazynote-notes.json
+lazynote -- search "a note whose title is search"
 ```
+
+## TUI
 
 Open the terminal UI:
 
@@ -164,45 +127,76 @@ Open the terminal UI:
 lazynote
 ```
 
-Print version metadata:
-
-```sh
-lazynote --version
-```
-
-The UI shows note titles on the left and the selected note body on the right.
+The TUI shows note titles on the left and the selected note body on the right.
 
 Keys:
 
-- left / `h`: focus the notes list
-- right / `l`: focus the selected note body
-- `j` / down: move down in the active pane
-- `k` / up: move up in the active pane
-- PageDown / Ctrl-D: scroll selected note body down
-- PageUp / Ctrl-U: scroll selected note body up
-- `d` / delete: arm deletion; press `d` again on the same note to confirm
+- left / `h`: focus note list
+- right / `l`: focus note body
+- `j` / down: move or scroll down in the active pane
+- `k` / up: move or scroll up in the active pane
+- PageDown / Ctrl-D: scroll note body down
+- PageUp / Ctrl-U: scroll note body up
+- `d` / delete: arm deletion; press `d` again to confirm
 - `q` / Ctrl-C: quit
 
-Terminal fonts are controlled by your terminal emulator. `lazynote` uses rounded
-borders, color, and simple glyphs where the terminal supports them.
+Terminal fonts, glyph rendering, and colors depend on your terminal emulator.
 
 ## Storage
 
-Notes are stored as JSON at:
+Default notes file:
 
 ```text
 ~/.local/share/lazynote/notes.json
 ```
 
-Run `lazynote path` to print the active notes file. Set `LAZYNOTE_PATH` to use a
-different notes file.
+Print the active path:
+
+```sh
+lazynote path
+```
+
+Use a different notes file:
+
+```sh
+LAZYNOTE_PATH=/tmp/lazynote-dev.json lazynote list
+```
+
+Back up your notes:
+
+```sh
+mkdir -p ~/backup/lazynote
+cp "$(lazynote path)" ~/backup/lazynote/notes.json
+```
+
+Because storage is one JSON file, it can be synced with tools like Syncthing,
+Dropbox, iCloud Drive, or a private dotfiles repository. Stop `lazynote` before
+replacing the file manually.
 
 ## Development
 
-Run the tests:
+Run tests and build a dev binary:
 
 ```sh
 make test
+make build
+bin/lazynote --version
+```
+
+Try the dev binary without touching your real notes:
+
+```sh
+LAZYNOTE_PATH=/tmp/lazynote-dev.json bin/lazynote "dev smoke" "hello from local build"
+LAZYNOTE_PATH=/tmp/lazynote-dev.json bin/lazynote list
+LAZYNOTE_PATH=/tmp/lazynote-dev.json bin/lazynote export markdown
+LAZYNOTE_PATH=/tmp/lazynote-dev.json bin/lazynote
+```
+
+If `go` is installed but not on `PATH`:
+
+```sh
+make GO=/usr/local/go/bin/go test
+make GO=/usr/local/go/bin/go build
 ```
 
 Check the installer script:
@@ -212,44 +206,36 @@ sh -n install.sh
 sh install.sh --help
 ```
 
-Build a local binary:
-
-```sh
-make build
-bin/lazynote --version
-```
-
-Useful make targets:
+Useful targets:
 
 - `make build`: build `bin/lazynote`
 - `make test`: run `go test ./...`
-- `make install`: install the binary under `$(PREFIX)/bin`
-- `make uninstall`: remove the installed binary from `$(PREFIX)/bin`
+- `make install`: install under `$(PREFIX)/bin`
+- `make uninstall`: remove from `$(PREFIX)/bin`
 - `make clean`: remove local build and release artifacts
+- `make release-snapshot`: build local GoReleaser artifacts
 
 ## Releases
 
-Release configuration lives in `.goreleaser.yaml`. It builds `lazynote` for
-Linux, macOS, and Windows on `amd64` and `arm64`, injects version metadata, and
-produces checksums, archives, and Linux `.deb`, `.rpm`, and `.apk` packages.
-Install GoReleaser before running release targets.
+GoReleaser configuration lives in `.goreleaser.yaml`. Tagged releases build
+Linux, macOS, and Windows binaries for `amd64` and `arm64`, plus checksums,
+archives, and Linux packages.
 
-Create a local release snapshot:
+Create a local snapshot:
 
 ```sh
 make release-snapshot
 ```
 
-Tagged releases are built by GitHub Actions:
+Publish a tagged release:
 
 ```sh
 git tag v0.1.1
 git push origin v0.1.1
 ```
 
-GoReleaser publishes archives, checksums, and Linux packages to the GitHub
-Release. Publishing installable apt/yum/apk repositories or Homebrew taps is a
-separate distribution step after release artifacts exist.
+GitHub Actions runs tests and publishes release artifacts. Publishing apt/yum/apk
+repositories or Homebrew taps is a separate distribution step.
 
 ## License
 

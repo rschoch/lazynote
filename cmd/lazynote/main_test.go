@@ -19,7 +19,7 @@ func TestRunAppendsNote(t *testing.T) {
 	if err := run([]string{"todo", "finish", "the", "slice"}, nil, &stdout); err != nil {
 		t.Fatalf("run append: %v", err)
 	}
-	if got, want := stdout.String(), "noted\n"; got != want {
+	if got, want := stdout.String(), noteSuccessMessage+"\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 
@@ -40,6 +40,90 @@ func TestRunRequiresTitleAndBody(t *testing.T) {
 
 	if err := run([]string{"title-only"}, nil, os.Stdout); err == nil {
 		t.Fatal("run returned nil error, want usage error")
+	}
+}
+
+func TestRunAppendsNoteQuietly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	var stdout bytes.Buffer
+	if err := run([]string{"--quiet", "todo", "finish the slice"}, nil, &stdout); err != nil {
+		t.Fatalf("run quiet append: %v", err)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty output", got)
+	}
+
+	loaded, err := notes.NewStore(path).Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if len(loaded) != 1 {
+		t.Fatalf("loaded %d notes, want 1", len(loaded))
+	}
+	if loaded[0].Title != "todo" || loaded[0].Body != "finish the slice" {
+		t.Fatalf("stored unexpected note: %#v", loaded[0])
+	}
+}
+
+func TestRunAppendsNoteQuietlyWithTrailingFlag(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	var stdout bytes.Buffer
+	if err := run([]string{"todo", "finish the slice", "-q"}, nil, &stdout); err != nil {
+		t.Fatalf("run quiet append: %v", err)
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty output", got)
+	}
+
+	loaded, err := notes.NewStore(path).Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if loaded[0].Title != "todo" || loaded[0].Body != "finish the slice" {
+		t.Fatalf("stored unexpected note: %#v", loaded[0])
+	}
+}
+
+func TestRunCanAppendLiteralQuietFlagAfterOptionSeparator(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	var stdout bytes.Buffer
+	if err := run([]string{"--", "-q", "literal body"}, nil, &stdout); err != nil {
+		t.Fatalf("run literal quiet flag append: %v", err)
+	}
+	if got, want := stdout.String(), noteSuccessMessage+"\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+
+	loaded, err := notes.NewStore(path).Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if loaded[0].Title != "-q" || loaded[0].Body != "literal body" {
+		t.Fatalf("stored unexpected note: %#v", loaded[0])
+	}
+}
+
+func TestRunCanAppendTitleThatMatchesCommandAfterOptionSeparator(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	var stdout bytes.Buffer
+	if err := run([]string{"--", "search", "literal command title"}, nil, &stdout); err != nil {
+		t.Fatalf("run literal command title append: %v", err)
+	}
+
+	loaded, err := notes.NewStore(path).Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if loaded[0].Title != "search" || loaded[0].Body != "literal command title" {
+		t.Fatalf("stored unexpected note: %#v", loaded[0])
 	}
 }
 
@@ -96,7 +180,7 @@ func TestRunAppendsNoteFromStdin(t *testing.T) {
 	if err := run([]string{"summary"}, stdin, &stdout); err != nil {
 		t.Fatalf("run append stdin: %v", err)
 	}
-	if got, want := stdout.String(), "noted\n"; got != want {
+	if got, want := stdout.String(), noteSuccessMessage+"\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 

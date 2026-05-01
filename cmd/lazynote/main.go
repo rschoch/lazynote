@@ -13,7 +13,15 @@ import (
 	"github.com/rschoch/lazynote/internal/ui"
 )
 
-const maxInferredTitleRunes = 80
+const (
+	maxInferredTitleRunes = 80
+	noteSuccessMessage    = "✎ Noted!"
+)
+
+type runOptions struct {
+	quiet         bool
+	literalAppend bool
+}
 
 var (
 	version = "dev"
@@ -30,6 +38,9 @@ func main() {
 }
 
 func run(args []string, stdin io.Reader, stdout io.Writer) error {
+	var opts runOptions
+	args, opts = parseGlobalOptions(args)
+
 	if len(args) > 0 {
 		switch args[0] {
 		case "--help", "-h", "help":
@@ -47,7 +58,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	store := notes.NewStore(path)
 
-	if len(args) > 0 {
+	if len(args) > 0 && !opts.literalAppend {
 		switch args[0] {
 		case "list":
 			return runList(store, args[1:], stdout)
@@ -73,14 +84,35 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 
-	fmt.Fprintln(stdout, "noted")
+	if !opts.quiet {
+		fmt.Fprintln(stdout, noteSuccessMessage)
+	}
 	return nil
+}
+
+func parseGlobalOptions(args []string) ([]string, runOptions) {
+	var opts runOptions
+	parsed := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--quiet", "-q":
+			opts.quiet = true
+		case "--":
+			opts.literalAppend = true
+			parsed = append(parsed, args[i+1:]...)
+			return parsed, opts
+		default:
+			parsed = append(parsed, args[i])
+		}
+	}
+	return parsed, opts
 }
 
 func printUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  lazynote <title> <note>
-  lazynote <title> -
+  lazynote [--quiet] <title> <note>
+  lazynote [--quiet] <title> -
+  lazynote -- <title> <note>
   command | lazynote <title>
   command | lazynote
   lazynote list
@@ -96,6 +128,8 @@ func printUsage(w io.Writer) {
 Commands:
   <title> <note>  Append a note from arguments
   <title> -       Append a note using stdin as the body
+  -- <title> <note>
+                  Append a note whose title starts with a command or flag
   list            List note IDs, timestamps, and titles
   show <id>       Print one note by ID or unique ID prefix
   show --body <id>
@@ -106,6 +140,9 @@ Commands:
   export json     Export all notes as JSON
   version         Print version information
   help            Print this help text
+
+Options:
+  --quiet, -q     Suppress the success message after appending a note
 
 Environment:
   LAZYNOTE_PATH   Override the notes JSON file path

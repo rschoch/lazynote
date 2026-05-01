@@ -175,6 +175,34 @@ func TestStatusLineIncludesPositionAndKeys(t *testing.T) {
 	}
 }
 
+func TestStatusLineIncludesEmptyState(t *testing.T) {
+	app := &App{}
+
+	got := app.statusLine()
+	for _, want := range []string{"notes 0", "←/→ focus", "q quit"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("statusLine() = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestStatusLineIncludesDetailScrollOffset(t *testing.T) {
+	app := &App{
+		notes: []notes.Note{
+			{Title: "one", CreatedAt: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)},
+		},
+		activePane:   paneDetail,
+		detailOffset: 4,
+	}
+
+	got := app.statusLine()
+	for _, want := range []string{"note", "1/1", "scroll +4"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("statusLine() = %q, want %q", got, want)
+		}
+	}
+}
+
 func TestPaneColorsFollowActivePane(t *testing.T) {
 	app := &App{}
 	if app.paneFrameColor(paneNotes) != colorAccent {
