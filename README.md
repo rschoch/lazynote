@@ -21,7 +21,7 @@ toolchain.
 
 ```sh
 # take simple note: $ lazynote <title> <body>
-lazynote showerthought 'Pavlov probably thought about feeding his dogs every time someone rang a bell.'
+lazynote showerthought 'Running from the cops is the ultimate double or nothing.'
 
 # piped body with an inferred title
 printf '## Session abc123\n- fixed flaky test\n' | lazynote
