@@ -7,6 +7,8 @@ shell scripts, coding agents, and other terminal tools.
 Notes are stored locally as JSON. No server, database, or Go toolchain is needed
 to run the released binary.
 
+![lazynote TUI screenshot](assets/screenshot.png)
+
 ## Install
 
 Recommended for Linux and macOS:
