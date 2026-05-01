@@ -73,15 +73,15 @@ make install PREFIX="$HOME/.local"
 Capture a note:
 
 ```sh
-lazynote mytitle "my note on something i shouldnt forget"
+lazynote idea 'Use a single notes file so agents and humans share context.'
 ```
 
 Capture from stdin:
 
 ```sh
-echo "my note from another command" | lazynote mytitle
-cat summary.md | lazynote "session summary"
-lazynote "session summary" - < summary.md
+echo 'Refactor release notes before tagging v0.1.2.' | lazynote release
+cat summary.md | lazynote 'session summary'
+lazynote 'session summary' - < summary.md
 ```
 
 If stdin is piped without a title, the first non-empty line becomes the title:
@@ -93,8 +93,8 @@ printf '## Session abc123\n- shipped release prep\n' | lazynote
 Suppress success output for scripts and agents:
 
 ```sh
-some-command | lazynote --quiet "session summary"
-lazynote --quiet mytitle "body"
+some-command | lazynote --quiet 'session summary'
+lazynote --quiet release 'Tag after CI passes.'
 ```
 
 Retrieve context:
@@ -116,8 +116,11 @@ Command words such as `list`, `show`, `search`, `path`, and `export` are
 reserved when they are the first argument. Use `--` to use one as a title:
 
 ```sh
-lazynote -- search "a note whose title is search"
+lazynote -- search 'a note whose title is search'
 ```
+
+Use single quotes for literal shell text, especially if the note contains
+characters like `!`, `$`, or backticks.
 
 ## TUI
 
@@ -186,7 +189,7 @@ bin/lazynote --version
 Try the dev binary without touching your real notes:
 
 ```sh
-LAZYNOTE_PATH=/tmp/lazynote-dev.json bin/lazynote "dev smoke" "hello from local build"
+LAZYNOTE_PATH=/tmp/lazynote-dev.json bin/lazynote 'dev smoke' 'hello from local build'
 LAZYNOTE_PATH=/tmp/lazynote-dev.json bin/lazynote list
 LAZYNOTE_PATH=/tmp/lazynote-dev.json bin/lazynote export markdown
 LAZYNOTE_PATH=/tmp/lazynote-dev.json bin/lazynote
