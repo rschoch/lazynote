@@ -16,6 +16,13 @@ The installer downloads the latest release for your OS and architecture, checks
 the release checksum when `sha256sum` or `shasum` is available, and installs the
 binary to `~/.local/bin`.
 
+If `lazynote` is not found after installation, add the install directory to your
+`PATH`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
 To inspect the script first:
 
 ```sh
