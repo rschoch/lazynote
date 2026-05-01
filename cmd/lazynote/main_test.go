@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,20 @@ func TestRunPrintsHelp(t *testing.T) {
 	}
 	if !bytes.Contains([]byte(got), []byte("LAZYNOTE_PATH")) {
 		t.Fatalf("stdout = %q, want environment help", got)
+	}
+}
+
+func TestRunPrintsNotesPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	var stdout bytes.Buffer
+	if err := run([]string{"path"}, nil, &stdout); err != nil {
+		t.Fatalf("run path: %v", err)
+	}
+
+	if got, want := stdout.String(), path+"\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 }
 
@@ -199,6 +214,28 @@ func TestRunShowsNoteByIDPrefix(t *testing.T) {
 	}
 }
 
+func TestRunShowsOnlyNoteBody(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	note, err := notes.NewStore(path).Append("session summary", "line one\nline two")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"show", note.ID[:6], "--body"}, nil, &stdout); err != nil {
+		t.Fatalf("run show body: %v", err)
+	}
+
+	if got, want := stdout.String(), "line one\nline two\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if strings.Contains(stdout.String(), "id:") || strings.Contains(stdout.String(), "title:") {
+		t.Fatalf("stdout = %q, want body only", stdout.String())
+	}
+}
+
 func TestRunSearchesNotes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notes.json")
 	t.Setenv("LAZYNOTE_PATH", path)
@@ -224,6 +261,54 @@ func TestRunSearchesNotes(t *testing.T) {
 	}
 	if strings.Contains(got, other.ID) || strings.Contains(got, "grocery list") {
 		t.Fatalf("stdout = %q, want non-matching note omitted", got)
+	}
+}
+
+func TestRunExportsNotesAsMarkdown(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	note, err := notes.NewStore(path).Append("release plan", "ship packages")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"export", "markdown"}, nil, &stdout); err != nil {
+		t.Fatalf("run export markdown: %v", err)
+	}
+
+	got := stdout.String()
+	for _, want := range []string{"# lazynote export", "## release plan", "- id: `" + note.ID + "`", "ship packages"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestRunExportsNotesAsJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	note, err := notes.NewStore(path).Append("release plan", "ship packages")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"export", "json"}, nil, &stdout); err != nil {
+		t.Fatalf("run export json: %v", err)
+	}
+
+	var exported []notes.Note
+	if err := json.Unmarshal(stdout.Bytes(), &exported); err != nil {
+		t.Fatalf("unmarshal exported json: %v\n%s", err, stdout.String())
+	}
+	if len(exported) != 1 {
+		t.Fatalf("exported %d notes, want 1", len(exported))
+	}
+	if exported[0].ID != note.ID || exported[0].Title != "release plan" || exported[0].Body != "ship packages" {
+		t.Fatalf("exported unexpected note: %#v", exported[0])
 	}
 }
 

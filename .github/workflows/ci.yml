@@ -24,5 +24,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Check install script
+        run: |
+          sh -n install.sh
+          sh install.sh --help >/dev/null
+          INSTALL_DIR="$RUNNER_TEMP/lazynote-install" sh install.sh --version v0.1.0
+          "$RUNNER_TEMP/lazynote-install/lazynote" --version
+
       - name: Run tests
         run: go test -timeout 60s ./...

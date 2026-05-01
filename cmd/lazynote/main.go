@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -54,6 +55,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 			return runShow(store, args[1:], stdout)
 		case "search":
 			return runSearch(store, args[1:], stdout)
+		case "path":
+			return runPath(store, args[1:], stdout)
+		case "export":
+			return runExport(store, args[1:], stdout)
 		}
 	}
 
@@ -79,8 +84,11 @@ func printUsage(w io.Writer) {
   command | lazynote <title>
   command | lazynote
   lazynote list
-  lazynote show <id>
+  lazynote show [--body] <id>
   lazynote search <query>
+  lazynote path
+  lazynote export markdown
+  lazynote export json
   lazynote
   lazynote --version
   lazynote --help
@@ -90,7 +98,12 @@ Commands:
   <title> -       Append a note using stdin as the body
   list            List note IDs, timestamps, and titles
   show <id>       Print one note by ID or unique ID prefix
+  show --body <id>
+                  Print only the note body
   search <query>  List notes matching title or body text
+  path            Print the notes JSON file path
+  export markdown Export all notes as Markdown
+  export json     Export all notes as JSON
   version         Print version information
   help            Print this help text
 
@@ -119,17 +132,23 @@ func runList(store *notes.Store, args []string, stdout io.Writer) error {
 }
 
 func runShow(store *notes.Store, args []string, stdout io.Writer) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: lazynote show <id>")
+	id, bodyOnly, err := parseShowArgs(args)
+	if err != nil {
+		return err
 	}
 
 	loaded, err := store.Load()
 	if err != nil {
 		return err
 	}
-	note, err := findNote(loaded, args[0])
+	note, err := findNote(loaded, id)
 	if err != nil {
 		return err
+	}
+
+	if bodyOnly {
+		fmt.Fprintln(stdout, note.Body)
+		return nil
 	}
 
 	fmt.Fprintf(stdout, "id: %s\n", note.ID)
@@ -137,6 +156,27 @@ func runShow(store *notes.Store, args []string, stdout io.Writer) error {
 	fmt.Fprintf(stdout, "title: %s\n\n", note.Title)
 	fmt.Fprintln(stdout, note.Body)
 	return nil
+}
+
+func parseShowArgs(args []string) (id string, bodyOnly bool, err error) {
+	for _, arg := range args {
+		switch arg {
+		case "--body", "-b":
+			bodyOnly = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return "", false, fmt.Errorf("usage: lazynote show [--body] <id>")
+			}
+			if id != "" {
+				return "", false, fmt.Errorf("usage: lazynote show [--body] <id>")
+			}
+			id = arg
+		}
+	}
+	if id == "" {
+		return "", false, fmt.Errorf("usage: lazynote show [--body] <id>")
+	}
+	return id, bodyOnly, nil
 }
 
 func runSearch(store *notes.Store, args []string, stdout io.Writer) error {
@@ -156,6 +196,60 @@ func runSearch(store *notes.Store, args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, noteSummary(note))
 		}
 	}
+	return nil
+}
+
+func runPath(store *notes.Store, args []string, stdout io.Writer) error {
+	if len(args) != 0 {
+		return fmt.Errorf("usage: lazynote path")
+	}
+
+	fmt.Fprintln(stdout, store.Path())
+	return nil
+}
+
+func runExport(store *notes.Store, args []string, stdout io.Writer) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: lazynote export <markdown|json>")
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		return err
+	}
+
+	switch args[0] {
+	case "markdown", "md":
+		return writeMarkdownExport(stdout, loaded)
+	case "json":
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(loaded)
+	default:
+		return fmt.Errorf("usage: lazynote export <markdown|json>")
+	}
+}
+
+func writeMarkdownExport(w io.Writer, loaded []notes.Note) error {
+	if _, err := fmt.Fprintln(w, "# lazynote export"); err != nil {
+		return err
+	}
+
+	for _, note := range loaded {
+		if _, err := fmt.Fprintf(w, "\n## %s\n\n", note.Title); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "- id: `%s`\n", note.ID); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "- created_at: `%s`\n\n", note.CreatedAt.UTC().Format(time.RFC3339)); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(w, note.Body); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

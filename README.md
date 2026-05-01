@@ -87,7 +87,10 @@ Retrieve saved context later:
 ```sh
 lazynote list
 lazynote show <id>
+lazynote show --body <id>
 lazynote search packaging
+lazynote export markdown
+lazynote export json
 ```
 
 The goal is bidirectional interoperability: humans can browse notes in the TUI,
@@ -129,11 +132,30 @@ to print a full note:
 lazynote show <id>
 ```
 
-`show` also accepts a unique ID prefix. Search note titles and bodies:
+`show` also accepts a unique ID prefix. Print only the note body:
+
+```sh
+lazynote show --body <id>
+```
+
+Search note titles and bodies:
 
 ```sh
 lazynote search packaging
 lazynote search "session summary"
+```
+
+Print the notes file path:
+
+```sh
+lazynote path
+```
+
+Export all notes:
+
+```sh
+lazynote export markdown > lazynote-notes.md
+lazynote export json > lazynote-notes.json
 ```
 
 Open the terminal UI:
@@ -172,7 +194,8 @@ Notes are stored as JSON at:
 ~/.local/share/lazynote/notes.json
 ```
 
-Set `LAZYNOTE_PATH` to use a different notes file.
+Run `lazynote path` to print the active notes file. Set `LAZYNOTE_PATH` to use a
+different notes file.
 
 ## Development
 
@@ -180,6 +203,13 @@ Run the tests:
 
 ```sh
 make test
+```
+
+Check the installer script:
+
+```sh
+sh -n install.sh
+sh install.sh --help
 ```
 
 Build a local binary:
