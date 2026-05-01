@@ -1,0 +1,17 @@
+{
+  "name": "lazynote",
+  "owner": {
+    "name": "rschoch"
+  },
+  "metadata": {
+    "description": "Plugins and skills for using lazynote from Claude Code.",
+    "version": "0.1.4"
+  },
+  "plugins": [
+    {
+      "name": "lazynote",
+      "source": "./plugins/lazynote",
+      "description": "Save and retrieve local terminal notes from agent sessions."
+    }
+  ]
+}

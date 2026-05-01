@@ -79,7 +79,7 @@ lazynote idea 'Use a single notes file so agents and humans share context.'
 Capture from stdin:
 
 ```sh
-echo 'Refactor release notes before tagging v0.1.2.' | lazynote release
+echo 'Refactor release notes before tagging the next release.' | lazynote release
 cat summary.md | lazynote 'session summary'
 lazynote 'session summary' - < summary.md
 ```
@@ -121,6 +121,29 @@ lazynote -- search 'a note whose title is search'
 
 Use single quotes for literal shell text, especially if the note contains
 characters like `!`, `$`, or backticks.
+
+## Agent Plugins
+
+Agent plugins are optional. The `lazynote` CLI works on its own; plugins only
+teach tools like Codex or Claude Code how to save and retrieve notes through the
+CLI. Install the `lazynote` binary first, then install the plugin for your
+agent.
+
+Codex, tested locally:
+
+```sh
+codex plugin marketplace add rschoch/lazynote
+```
+
+Then open `/plugins` in Codex and install `lazynote`.
+
+Claude Code, plugin layout provided but not yet verified by this project:
+
+```text
+/plugin marketplace add rschoch/lazynote
+/plugin install lazynote@lazynote
+/reload-plugins
+```
 
 ## TUI
 

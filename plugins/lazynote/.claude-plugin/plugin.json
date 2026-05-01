@@ -1,0 +1,20 @@
+{
+  "name": "lazynote",
+  "version": "0.1.4",
+  "description": "Agent-friendly workflows for saving and retrieving local lazynote notes.",
+  "author": {
+    "name": "rschoch",
+    "url": "https://github.com/rschoch"
+  },
+  "homepage": "https://github.com/rschoch/lazynote",
+  "repository": "https://github.com/rschoch/lazynote",
+  "license": "MIT",
+  "keywords": [
+    "notes",
+    "tui",
+    "cli",
+    "agents",
+    "interoperability"
+  ],
+  "skills": "./skills/"
+}

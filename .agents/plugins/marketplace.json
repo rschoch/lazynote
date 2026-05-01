@@ -1,0 +1,20 @@
+{
+  "name": "lazynote",
+  "interface": {
+    "displayName": "lazynote"
+  },
+  "plugins": [
+    {
+      "name": "lazynote",
+      "source": {
+        "source": "local",
+        "path": "./plugins/lazynote"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
