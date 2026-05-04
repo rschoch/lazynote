@@ -16,7 +16,8 @@ func (a *App) sourceNotes() []notes.Note {
 }
 
 func (a *App) orderedNotes(loaded []notes.Note) []notes.Note {
-	ordered := append([]notes.Note(nil), loaded...)
+	ordered := make([]notes.Note, len(loaded))
+	copy(ordered, loaded)
 	switch a.settings.NoteOrder {
 	case OrderNewestFirst:
 		sort.SliceStable(ordered, func(i, j int) bool {

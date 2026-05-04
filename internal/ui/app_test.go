@@ -56,6 +56,39 @@ func TestDeleteSelectedNoteRequiresConfirmation(t *testing.T) {
 	}
 }
 
+func TestDeleteOnlyNoteClearsVisibleNotes(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	if _, err := store.Append("only note", "only body"); err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	app := loadedApp(t, store)
+
+	if err := app.delete(nil, nil); err != nil {
+		t.Fatalf("delete first press: %v", err)
+	}
+	if err := app.delete(nil, nil); err != nil {
+		t.Fatalf("delete second press: %v", err)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if len(loaded) != 0 {
+		t.Fatalf("loaded %d notes, want empty store", len(loaded))
+	}
+	if len(app.notes) != 0 {
+		t.Fatalf("visible notes = %d, want empty list", len(app.notes))
+	}
+	if len(app.sourceNotes()) != 0 {
+		t.Fatalf("source notes = %d, want empty source", len(app.sourceNotes()))
+	}
+	if _, ok := app.selectedNote(); ok {
+		t.Fatal("selectedNote ok = true, want no selected note")
+	}
+}
+
 func TestSelectionCancelsDeleteConfirmation(t *testing.T) {
 	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
 	if _, err := store.Append("first", "first body"); err != nil {
@@ -406,6 +439,33 @@ func TestReloadNotesFromDiskClampsDeletedSelection(t *testing.T) {
 	}
 	if app.pendingDeleteID != "" {
 		t.Fatalf("pendingDeleteID = %q, want cleared", app.pendingDeleteID)
+	}
+}
+
+func TestReloadNotesFromDiskClearsLastDeletedNote(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.Append("only note", "only body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	app := loadedApp(t, store)
+	if _, err := store.Delete(note.ID); err != nil {
+		t.Fatalf("delete external note: %v", err)
+	}
+
+	if err := app.reloadNotesFromDisk("Notes updated"); err != nil {
+		t.Fatalf("reload notes: %v", err)
+	}
+
+	if len(app.notes) != 0 {
+		t.Fatalf("visible notes = %d, want empty list", len(app.notes))
+	}
+	if len(app.sourceNotes()) != 0 {
+		t.Fatalf("source notes = %d, want empty source", len(app.sourceNotes()))
+	}
+	if _, ok := app.selectedNote(); ok {
+		t.Fatal("selectedNote ok = true, want no selected note")
 	}
 }
 
