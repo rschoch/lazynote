@@ -396,6 +396,32 @@ func TestRunExportsNotesAsJSON(t *testing.T) {
 	}
 }
 
+func TestRunBacksUpRawNotesFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	if _, err := notes.NewStore(path).Append("release plan", "ship packages"); err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+	backupPath := filepath.Join(t.TempDir(), "backup.json")
+
+	var stdout bytes.Buffer
+	if err := run([]string{"backup", backupPath}, nil, &stdout); err != nil {
+		t.Fatalf("run backup: %v", err)
+	}
+
+	if got, want := strings.TrimSpace(stdout.String()), backupPath; got != want {
+		t.Fatalf("stdout = %q, want backup path %q", stdout.String(), want)
+	}
+	copied, err := os.ReadFile(backupPath)
+	if err != nil {
+		t.Fatalf("read backup: %v", err)
+	}
+	if !bytes.Contains(copied, []byte("release plan")) {
+		t.Fatalf("backup = %q, want note contents", copied)
+	}
+}
+
 func TestRunShowReturnsErrorForMissingNote(t *testing.T) {
 	t.Setenv("LAZYNOTE_PATH", filepath.Join(t.TempDir(), "notes.json"))
 

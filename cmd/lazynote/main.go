@@ -94,6 +94,8 @@ func runStoreCommand(store *notes.Store, args []string, stdout io.Writer) (bool,
 		return true, runPath(store, args[1:], stdout)
 	case "export":
 		return true, runExport(store, args[1:], stdout)
+	case "backup":
+		return true, runBackup(store, args[1:], stdout)
 	default:
 		return false, nil
 	}
@@ -150,6 +152,7 @@ func printUsage(w io.Writer) {
   lazynote show [--body] <id>
   lazynote search <query>
   lazynote path
+  lazynote backup [path]
   lazynote export markdown
   lazynote export json
   lazynote
@@ -167,6 +170,7 @@ Commands:
                   Print only the note body
   search <query>  List notes matching title or body text
   path            Print the notes JSON file path
+  backup [path]   Copy the raw notes JSON file to a timestamped backup
   export markdown Export all notes as Markdown
   export json     Export all notes as JSON
   version         Print version information
@@ -296,6 +300,23 @@ func runExport(store *notes.Store, args []string, stdout io.Writer) error {
 	default:
 		return fmt.Errorf("usage: lazynote export <markdown|json>")
 	}
+}
+
+func runBackup(store *notes.Store, args []string, stdout io.Writer) error {
+	if len(args) > 1 {
+		return fmt.Errorf("usage: lazynote backup [path]")
+	}
+
+	target := ""
+	if len(args) == 1 {
+		target = args[0]
+	}
+	path, err := store.Backup(target)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, path)
+	return nil
 }
 
 func writeMarkdownExport(w io.Writer, loaded []notes.Note) error {
