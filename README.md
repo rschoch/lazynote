@@ -14,6 +14,22 @@ quick context capture without an account, server, database, or sync service.
 Notes are stored locally as JSON. The released binary does not require a Go
 toolchain.
 
+## Contents
+
+- [Why lazynote?](#why-lazynote)
+- [Quick Example](#quick-example)
+- [Install](#install)
+- [CLI Workflows](#cli-workflows)
+- [Agent Plugins](#agent-plugins)
+  - [Codex Install](#codex-install)
+  - [Claude Code Install](#claude-code-install)
+- [TUI](#tui)
+  - [Themes](#themes)
+- [Storage](#storage)
+- [Development](#development)
+- [Releases](#releases)
+- [License](#license)
+
 ## Why lazynote?
 
 - Capture notes from arguments, stdin, and shell pipelines.
@@ -161,7 +177,10 @@ teach tools like Codex or Claude Code how to save and retrieve notes through the
 CLI. Install the `lazynote` binary first, then install the plugin for your
 agent.
 
-Codex, tested locally:
+### Codex Install
+
+Add the GitHub marketplace source. This does not require cloning `lazynote`
+first:
 
 ```sh
 codex plugin marketplace add rschoch/lazynote
@@ -169,7 +188,19 @@ codex plugin marketplace add rschoch/lazynote
 
 Then open `/plugins` in Codex and install `lazynote`.
 
-Claude Code, plugin layout provided but not yet verified by this project:
+Ask Codex to use `lazynote` when you want it to persist or retrieve project
+context:
+
+```text
+"Use lazynote to save the proposed implementation plan."
+"Search lazynote for notes about release packaging."
+"Save a summary of this debugging session to lazynote."
+```
+
+### Claude Code Install
+
+Add the GitHub marketplace source, install the plugin, and reload plugins. This
+does not require cloning `lazynote` first:
 
 ```text
 /plugin marketplace add rschoch/lazynote
@@ -177,13 +208,12 @@ Claude Code, plugin layout provided but not yet verified by this project:
 /reload-plugins
 ```
 
-Once the `lazynote` plugin is installed, you can ask an agent to persist or
-retrieve project context:
+Invoke the Claude Code skill with `/lazynote`:
 
 ```text
-Use lazynote to save the proposed implementation plan.
-Search lazynote for notes about release packaging.
-Save a summary of this debugging session to lazynote.
+/lazynote Save the proposed implementation plan.
+/lazynote Search for notes about release packaging.
+/lazynote Save a summary of this debugging session.
 ```
 
 ## TUI
