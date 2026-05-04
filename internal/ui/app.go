@@ -39,6 +39,7 @@ type App struct {
 	theme           Theme
 	settings        Settings
 	allNotes        []notes.Note
+	unreadIDs       map[string]struct{}
 	notes           []notes.Note
 	selected        int
 	detailOffset    int
@@ -166,6 +167,7 @@ func (a *App) keybindings(g *gocui.Gui) error {
 		{"", 'c', a.copy},
 		{"", 'd', a.delete},
 		{"", 'e', a.edit},
+		{"", 'p', a.togglePin},
 		{"", 'r', a.manualRefresh},
 		{"", '/', a.startSearch},
 		{"", gocui.KeyEsc, a.clearFilterKey},
@@ -270,7 +272,7 @@ func (a *App) layoutNotes(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	}
 
 	for i, note := range a.notes {
-		fmt.Fprintln(v, listLine(note.Title, i == a.selected, width))
+		fmt.Fprintln(v, listLine(note, i == a.selected, a.isUnread(note.ID), width))
 	}
 	a.syncListCursor(v)
 
@@ -342,13 +344,27 @@ func (a *App) layoutStatus(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	}
 
 	g.Cursor = false
-	fmt.Fprint(v, fitLine(a.statusLine(), width))
+	fmt.Fprint(v, fitLine(a.statusLineForWidth(width), width))
 
 	return nil
 }
 
 func (a *App) statusLine() string {
-	return fmt.Sprintf(" %s   %s ", a.statusText(), a.statusHints())
+	return a.statusLineForWidth(0)
+}
+
+func (a *App) statusLineForWidth(width int) string {
+	status := a.statusText()
+	line := fmt.Sprintf(" %s   %s ", status, a.statusHints())
+	if width <= 0 || runeLen(line) <= width {
+		return line
+	}
+
+	compact := fmt.Sprintf(" %s   %s ", status, a.compactStatusHints())
+	if runeLen(compact) < runeLen(line) {
+		return compact
+	}
+	return line
 }
 
 func (a *App) statusText() string {
@@ -372,23 +388,45 @@ func (a *App) statusText() string {
 func (a *App) statusHints() string {
 	switch a.statusMode {
 	case statusDeleteArmed:
-		return "d confirm   arrows cancel   q quit"
+		return "d confirm   ↑↓ cancel   q quit"
 	}
 
 	if _, ok := a.selectedNote(); !ok {
 		if a.filterQuery != "" {
-			return "/ search   esc clear   r refresh   q quit"
+			return "/ filter   Esc clear   r reload   q quit"
 		}
-		return "/ search   r refresh   q quit"
+		return "/ filter   r reload   q quit"
 	}
 
 	if a.activePane == paneDetail {
-		return "↑/↓ scroll   pg page   ← list   c copy body   e edit   r refresh   q quit"
+		return "↑↓ scroll   Pg page   ← list   c copy   e edit   p pin   r reload   q quit"
 	}
 	if a.filterQuery != "" {
-		return "↑/↓ select   → body   c copy title   e edit   d delete   / search   esc clear   r refresh   q quit"
+		return "↑↓ nav   → body   / filter   Esc clear   c copy   p pin   e edit   d del   r reload   q quit"
 	}
-	return "↑/↓ select   → body   c copy title   e edit   d delete   / search   r refresh   q quit"
+	return "↑↓ nav   → body   / filter   c copy   p pin   e edit   d del   r reload   q quit"
+}
+
+func (a *App) compactStatusHints() string {
+	switch a.statusMode {
+	case statusDeleteArmed:
+		return "d ok   ↑↓ cancel   q"
+	}
+
+	if _, ok := a.selectedNote(); !ok {
+		if a.filterQuery != "" {
+			return "/   Esc   r   q"
+		}
+		return "/   r   q"
+	}
+
+	if a.activePane == paneDetail {
+		return "↑↓   Pg   ←   c   e   p   r   q"
+	}
+	if a.filterQuery != "" {
+		return "↑↓   →   /   Esc   c   p   e   d   r   q"
+	}
+	return "↑↓   →   /   c   p   e   d   r   q"
 }
 
 func (a *App) syncListCursor(v *gocui.View) {
@@ -426,6 +464,7 @@ func (a *App) up(g *gocui.Gui, v *gocui.View) error {
 
 	if a.selected > 0 {
 		a.selected--
+		a.markSelectedRead()
 		a.detailOffset = 0
 		a.pendingDeleteID = ""
 		a.status = ""
@@ -441,6 +480,7 @@ func (a *App) down(g *gocui.Gui, v *gocui.View) error {
 
 	if a.selected < len(a.notes)-1 {
 		a.selected++
+		a.markSelectedRead()
 		a.detailOffset = 0
 		a.pendingDeleteID = ""
 		a.status = ""
@@ -520,6 +560,30 @@ func (a *App) delete(g *gocui.Gui, v *gocui.View) error {
 	a.applyLoadedNotes(updated, "")
 	a.pendingDeleteID = ""
 	a.status = fmt.Sprintf("Deleted %q", note.Title)
+	a.statusMode = statusMessage
+	return nil
+}
+
+func (a *App) togglePin(g *gocui.Gui, v *gocui.View) error {
+	note, ok := a.selectedNote()
+	if !ok {
+		return nil
+	}
+
+	updated, pinned, err := a.store.TogglePinned(note.ID)
+	if err != nil {
+		a.status = fmt.Sprintf("Pin failed: %v", err)
+		a.statusMode = statusMessage
+		return nil
+	}
+
+	a.applyLoadedNotes(updated, "")
+	a.pendingDeleteID = ""
+	if pinned {
+		a.status = fmt.Sprintf("Pinned %q", note.Title)
+	} else {
+		a.status = fmt.Sprintf("Unpinned %q", note.Title)
+	}
 	a.statusMode = statusMessage
 	return nil
 }
@@ -669,17 +733,25 @@ func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-func listLine(title string, selected bool, width int) string {
-	prefix := "  "
+func listLine(note notes.Note, selected, unread bool, width int) string {
+	selector := " "
 	if selected {
-		prefix = "› "
+		selector = "›"
 	}
+	state := " "
+	switch {
+	case unread:
+		state = "●"
+	case note.Pinned:
+		state = "▴"
+	}
+	prefix := selector + " " + state + " "
 
 	available := width - runeLen(prefix)
 	if available < 1 {
 		available = 1
 	}
-	return prefix + padLine(fitLine(oneLine(title), available), available)
+	return prefix + padLine(fitLine(oneLine(note.Title), available), available)
 }
 
 func listWidth(maxX int) int {

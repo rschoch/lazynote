@@ -26,6 +26,7 @@ type Note struct {
 	Title     string    `json:"title"`
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"created_at"`
+	Pinned    bool      `json:"pinned,omitempty"`
 }
 
 // Store persists notes as a small JSON file.
@@ -174,6 +175,36 @@ func (s *Store) Update(id, title, body string) ([]Note, bool, error) {
 	}
 
 	return updated, changed, nil
+}
+
+// TogglePinned flips the pinned state for a note by ID and returns the updated list.
+func (s *Store) TogglePinned(id string) ([]Note, bool, error) {
+	var updated []Note
+	var pinned bool
+	err := s.withLock(func() error {
+		loaded, err := s.loadUnlocked()
+		if err != nil {
+			return err
+		}
+
+		updated = append([]Note(nil), loaded...)
+		for i := range updated {
+			if updated[i].ID != id {
+				continue
+			}
+
+			updated[i].Pinned = !updated[i].Pinned
+			pinned = updated[i].Pinned
+			return s.saveUnlocked(updated)
+		}
+
+		return fmt.Errorf("note not found: %s", id)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	return updated, pinned, nil
 }
 
 // Save replaces all persisted notes.

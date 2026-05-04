@@ -172,9 +172,31 @@ func TestStatusLineIncludesPositionAndKeys(t *testing.T) {
 	if strings.Contains(got, "2026") {
 		t.Fatalf("statusLine() = %q, want no selected-note timestamp", got)
 	}
-	for _, want := range []string{"2/2", "↑/↓ select", "→ body", "c copy title", "d delete", "q quit"} {
+	for _, want := range []string{"2/2", "↑↓ nav", "→ body", "p pin", "d del", "q quit"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestStatusLineUsesCompactHintsWhenNarrow(t *testing.T) {
+	app := &App{
+		notes: []notes.Note{
+			{Title: "one"},
+		},
+	}
+
+	width := 48
+	got := app.statusLineForWidth(width)
+	if runeLen(got) > width {
+		t.Fatalf("statusLineForWidth() length = %d, want at most %d: %q", runeLen(got), width, got)
+	}
+	if strings.Contains(got, "nav") || strings.Contains(got, "copy") || strings.Contains(got, "quit") {
+		t.Fatalf("statusLineForWidth() = %q, want compact hints", got)
+	}
+	for _, want := range []string{"1/1", "↑↓", "→", "/", "p", "q"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("statusLineForWidth() = %q, want %q", got, want)
 		}
 	}
 }
@@ -200,7 +222,7 @@ func TestStatusLineIncludesDetailScrollOffset(t *testing.T) {
 	}
 
 	got := app.statusLine()
-	for _, want := range []string{"1/1", "scroll +4", "↑/↓ scroll", "pg page", "← list", "c copy body"} {
+	for _, want := range []string{"1/1", "scroll +4", "↑↓ scroll", "Pg page", "← list", "c copy"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
@@ -214,7 +236,7 @@ func TestStatusLineIncludesDeleteConfirmationHints(t *testing.T) {
 	}
 
 	got := app.statusLine()
-	for _, want := range []string{"Press d again", "d confirm", "arrows cancel", "q quit"} {
+	for _, want := range []string{"Press d again", "d confirm", "↑↓ cancel", "q quit"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
@@ -231,7 +253,7 @@ func TestStatusLineIncludesMessageHints(t *testing.T) {
 	}
 
 	got := app.statusLine()
-	for _, want := range []string{"Deleted", "↑/↓ select", "→ body", "c copy title", "q quit"} {
+	for _, want := range []string{"Deleted", "↑↓ nav", "→ body", "c copy", "q quit"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
@@ -324,6 +346,9 @@ func TestReloadNotesFromDiskPicksUpExternalAppend(t *testing.T) {
 	}
 	if app.status != "1 new note" {
 		t.Fatalf("status = %q, want new note count", app.status)
+	}
+	if !app.isUnread(app.notes[2].ID) {
+		t.Fatalf("new note %q is not marked unread", app.notes[2].ID)
 	}
 }
 
@@ -444,6 +469,9 @@ func TestApplyLoadedNotesReportsNewNotesWithoutMovingSelection(t *testing.T) {
 	if app.notes[app.selected].ID != "one" {
 		t.Fatalf("selected = %q, want existing selection preserved", app.notes[app.selected].ID)
 	}
+	if !app.isUnread("two") {
+		t.Fatal("new note was not marked unread")
+	}
 }
 
 func TestApplyLoadedNotesCanAutoSelectNewNotes(t *testing.T) {
@@ -466,6 +494,9 @@ func TestApplyLoadedNotesCanAutoSelectNewNotes(t *testing.T) {
 	if app.notes[app.selected].ID != "two" {
 		t.Fatalf("selected = %q, want newest incoming note", app.notes[app.selected].ID)
 	}
+	if app.isUnread("two") {
+		t.Fatal("auto-selected new note is still unread")
+	}
 }
 
 func TestNoteOrderCanShowNewestFirst(t *testing.T) {
@@ -481,6 +512,64 @@ func TestNoteOrderCanShowNewestFirst(t *testing.T) {
 
 	if app.notes[0].ID != "two" {
 		t.Fatalf("first note = %q, want newest note first", app.notes[0].ID)
+	}
+}
+
+func TestPinnedNotesSortBeforeUnpinnedNotes(t *testing.T) {
+	createdAt := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+	app := &App{
+		settings: Settings{RefreshInterval: time.Second, NoteOrder: OrderOldestFirst},
+	}
+
+	app.applyLoadedNotes([]notes.Note{
+		{ID: "old", Title: "old", CreatedAt: createdAt},
+		{ID: "pinned", Title: "pinned", CreatedAt: createdAt.Add(time.Hour), Pinned: true},
+	}, "")
+
+	if app.notes[0].ID != "pinned" {
+		t.Fatalf("first note = %q, want pinned note first", app.notes[0].ID)
+	}
+}
+
+func TestTogglePinPinsSelectedNote(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.Append("pin me", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+	app := loadedApp(t, store)
+
+	if err := app.togglePin(nil, nil); err != nil {
+		t.Fatalf("toggle pin: %v", err)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if loaded[0].ID != note.ID || !loaded[0].Pinned {
+		t.Fatalf("loaded note = %#v, want pinned note", loaded[0])
+	}
+	if !strings.Contains(app.status, "Pinned") {
+		t.Fatalf("status = %q, want pinned message", app.status)
+	}
+}
+
+func TestSelectingUnreadNoteMarksItRead(t *testing.T) {
+	app := &App{
+		notes: []notes.Note{
+			{ID: "one", Title: "one"},
+			{ID: "two", Title: "two"},
+		},
+		unreadIDs: map[string]struct{}{"two": {}},
+	}
+
+	if err := app.down(nil, nil); err != nil {
+		t.Fatalf("down: %v", err)
+	}
+
+	if app.isUnread("two") {
+		t.Fatal("selected unread note is still unread")
 	}
 }
 
@@ -550,19 +639,28 @@ func TestFitLineTruncatesLongText(t *testing.T) {
 }
 
 func TestListLinePadsToFullWidth(t *testing.T) {
-	got := listLine("abc", true, 10)
+	got := listLine(notes.Note{Title: "abc"}, true, false, 10)
 	if runeLen(got) != 10 {
 		t.Fatalf("listLine length = %d, want 10: %q", runeLen(got), got)
 	}
-	if !strings.HasPrefix(got, "› abc") {
+	if !strings.HasPrefix(got, "›   abc") {
 		t.Fatalf("listLine() = %q, want selected prefix and title", got)
 	}
 }
 
 func TestListLineTruncatesLongTitle(t *testing.T) {
-	got := listLine("abcdef", false, 5)
-	if got != "  ab…" {
+	got := listLine(notes.Note{Title: "abcdef"}, false, false, 6)
+	if got != "    a…" {
 		t.Fatalf("listLine() = %q, want truncated padded title", got)
+	}
+}
+
+func TestListLineShowsUnreadAndPinnedGutter(t *testing.T) {
+	if got := listLine(notes.Note{Title: "abc", Pinned: true}, false, false, 10); !strings.HasPrefix(got, "  ▴ abc") {
+		t.Fatalf("pinned listLine() = %q, want pin glyph", got)
+	}
+	if got := listLine(notes.Note{Title: "abc", Pinned: true}, false, true, 10); !strings.HasPrefix(got, "  ● abc") {
+		t.Fatalf("unread listLine() = %q, want unread glyph", got)
 	}
 }
 

@@ -247,13 +247,16 @@ Keys:
 - `/`: filter notes by title or body; Enter applies, Esc cancels
 - `r`: reload notes from disk now
 - `e`: edit the selected note in `$VISUAL`, `$EDITOR`, or `vi`
+- `p`: pin or unpin the selected note
 - `c`: copy the selected title or note body
 - `d` / delete: arm deletion; press `d` again to confirm
 - Esc: clear the active filter
 - `q` / Ctrl-C: quit
 
 Copy uses terminal clipboard support. Editing opens a temporary file whose first
-line is the note title and whose remaining content is the note body. Fonts,
+line is the note title and whose remaining content is the note body. Pinned
+notes stay at the top of the list and use `▴` in the list gutter. Notes that
+arrive from another process while the TUI is open use `●` until selected. Fonts,
 glyph rendering, and colors depend on your terminal emulator.
 
 ### TUI Behavior

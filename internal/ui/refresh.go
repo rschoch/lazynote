@@ -110,6 +110,7 @@ func (a *App) applyLoadedNotes(loaded []notes.Note, status string) bool {
 		selectedID = note.ID
 	}
 	addedIDs := addedNoteIDs(a.sourceNotes(), ordered)
+	a.addUnread(addedIDs)
 	if a.settings.AutoSelectNewNotes && len(addedIDs) > 0 {
 		selectedID = newestNoteID(ordered, addedIDs)
 	}
@@ -163,6 +164,7 @@ func sameNotes(a, b []notes.Note) bool {
 		if a[i].ID != b[i].ID ||
 			a[i].Title != b[i].Title ||
 			a[i].Body != b[i].Body ||
+			a[i].Pinned != b[i].Pinned ||
 			!a[i].CreatedAt.Equal(b[i].CreatedAt) {
 			return false
 		}

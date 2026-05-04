@@ -20,10 +20,16 @@ func (a *App) orderedNotes(loaded []notes.Note) []notes.Note {
 	switch a.settings.NoteOrder {
 	case OrderNewestFirst:
 		sort.SliceStable(ordered, func(i, j int) bool {
+			if ordered[i].Pinned != ordered[j].Pinned {
+				return ordered[i].Pinned
+			}
 			return ordered[i].CreatedAt.After(ordered[j].CreatedAt)
 		})
 	default:
 		sort.SliceStable(ordered, func(i, j int) bool {
+			if ordered[i].Pinned != ordered[j].Pinned {
+				return ordered[i].Pinned
+			}
 			return ordered[i].CreatedAt.Before(ordered[j].CreatedAt)
 		})
 	}
@@ -39,11 +45,13 @@ func (a *App) applyFilter(selectedID string) {
 				a.detailOffset = 0
 			}
 			a.selected = index
+			a.markSelectedRead()
 			return
 		}
 	}
 
 	a.clampSelection()
+	a.markSelectedRead()
 	a.detailOffset = 0
 }
 
@@ -116,4 +124,35 @@ func newNotesStatus(count int) string {
 		return "1 new note"
 	}
 	return fmt.Sprintf("%d new notes", count)
+}
+
+func (a *App) addUnread(ids map[string]struct{}) {
+	if len(ids) == 0 {
+		return
+	}
+	if a.unreadIDs == nil {
+		a.unreadIDs = map[string]struct{}{}
+	}
+	for id := range ids {
+		a.unreadIDs[id] = struct{}{}
+	}
+}
+
+func (a *App) isUnread(id string) bool {
+	if a.unreadIDs == nil {
+		return false
+	}
+	_, ok := a.unreadIDs[id]
+	return ok
+}
+
+func (a *App) markSelectedRead() {
+	if a.unreadIDs == nil {
+		return
+	}
+	note, ok := a.selectedNote()
+	if !ok {
+		return
+	}
+	delete(a.unreadIDs, note.ID)
 }

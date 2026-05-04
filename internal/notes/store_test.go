@@ -93,6 +93,30 @@ func TestStoreUpdateChangesExistingNote(t *testing.T) {
 	}
 }
 
+func TestStoreTogglePinned(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.Append("first", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	updated, pinned, err := store.TogglePinned(note.ID)
+	if err != nil {
+		t.Fatalf("toggle pinned: %v", err)
+	}
+	if !pinned || !updated[0].Pinned {
+		t.Fatalf("pinned = %v, note pinned = %v, want true", pinned, updated[0].Pinned)
+	}
+
+	updated, pinned, err = store.TogglePinned(note.ID)
+	if err != nil {
+		t.Fatalf("toggle pinned again: %v", err)
+	}
+	if pinned || updated[0].Pinned {
+		t.Fatalf("pinned = %v, note pinned = %v, want false", pinned, updated[0].Pinned)
+	}
+}
+
 func TestStoreBackupCopiesRawMalformedNotesFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notes.json")
 	store := NewStore(path)
