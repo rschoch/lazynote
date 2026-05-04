@@ -1,6 +1,6 @@
 ---
 name: lazynote
-description: Use when the user asks to save, recall, search, export, or summarize notes with the local lazynote CLI, especially for session summaries, coding-agent context, and durable terminal notes.
+description: Use when the user asks to save, recall, search, edit, export, summarize, or manage local notes with the lazynote CLI, especially for session summaries, coding-agent context, and durable terminal notes.
 ---
 
 # lazynote
@@ -18,7 +18,7 @@ Use `lazynote` as a local notes layer for durable context that should survive th
 
 ## Save notes
 
-For multiline content, pass the body on stdin and keep command output quiet:
+For multiline content, pass the body on stdin and keep command output quiet unless the user wants confirmation:
 
 ```sh
 lazynote --quiet 'session summary' - <<'EOF'
@@ -42,20 +42,23 @@ some-command | lazynote --quiet 'diagnostic output'
 
 Use single quotes around literal shell text. If a title would collide with a command word such as `list` or `search`, use `--` before the title.
 
-## Retrieve notes
+## Retrieve and manage notes
 
 - List notes: `lazynote list`
 - Search notes: `lazynote search 'query'`
 - Search by tag: `lazynote search '#tag'`
 - Show a note: `lazynote show <id>`
 - Fetch only the body for context: `lazynote show --body <id>`
-- Edit a note: `lazynote edit <id> 'new title' 'new body'`
+- Edit in the configured editor: `lazynote edit <id>`
+- Edit directly: `lazynote edit <id> 'new title' 'new body'`
 - Delete a note: `lazynote delete <id>`
 - Pin or unpin a note: `lazynote pin <id>` or `lazynote unpin <id>`
 - Add or remove tags: `lazynote tag <id> work` or `lazynote untag <id> work`
+- Print a note's tags: `lazynote tags <id>`
 - Print the notes file path: `lazynote path`
+- Back up the raw notes JSON file: `lazynote backup` or `lazynote backup <path>`
 - Export everything: `lazynote export markdown` or `lazynote export json`
 
-`lazynote list` prints tab-separated `id`, `created_at`, and `title` fields, plus metadata when present. `show` accepts a full note ID or a unique ID prefix.
+`lazynote list` prints tab-separated `id`, `created_at`, and `title` fields, plus metadata when present. Most note commands accept a full note ID or a unique ID prefix.
 
 Do not edit the notes JSON file directly unless the user explicitly asks for low-level recovery or repair.

@@ -1,6 +1,6 @@
 {
   "name": "lazynote",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Agent-friendly workflows for saving and retrieving local lazynote notes.",
   "author": {
     "name": "rschoch",

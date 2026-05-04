@@ -223,6 +223,13 @@ codex plugin marketplace add rschoch/lazynote
 
 Then open `/plugins` in Codex and install `lazynote`.
 
+To pick up newer plugin instructions later, upgrade the marketplace source and
+update the installed plugin from `/plugins`:
+
+```sh
+codex plugin marketplace upgrade lazynote
+```
+
 Ask Codex to use `lazynote` when you want it to persist or retrieve project
 context:
 
@@ -239,6 +246,13 @@ does not require cloning `lazynote` first:
 
 ```text
 /plugin marketplace add rschoch/lazynote
+/plugin install lazynote@lazynote
+/reload-plugins
+```
+
+To pick up newer plugin instructions later, reinstall the plugin and reload:
+
+```text
 /plugin install lazynote@lazynote
 /reload-plugins
 ```
