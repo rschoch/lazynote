@@ -139,7 +139,7 @@ func (a *App) reloadNotesFromDisk(status string) error {
 }
 
 func (a *App) manualRefresh(g *gocui.Gui, v *gocui.View) error {
-	if a.inputMode == inputSearch || a.showHelp {
+	if a.inputMode == inputSearch || a.hasPopup() {
 		return nil
 	}
 

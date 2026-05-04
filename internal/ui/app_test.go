@@ -698,21 +698,24 @@ func TestNoteSubtitleIncludesTagsAndUpdatedAt(t *testing.T) {
 	}
 }
 
-func TestHelpToggleSetsHelpMode(t *testing.T) {
+func TestHelpToggleUsesPopup(t *testing.T) {
 	app := &App{}
 
 	if err := app.toggleHelp(nil, nil); err != nil {
 		t.Fatalf("toggle help: %v", err)
 	}
-	if !app.showHelp {
-		t.Fatal("showHelp = false, want true")
+	if app.popup == nil {
+		t.Fatal("popup is nil, want help popup")
+	}
+	if app.popup.Title != "Help" {
+		t.Fatalf("popup title = %q, want Help", app.popup.Title)
 	}
 
-	if err := app.closeHelp(nil, nil); err != nil {
-		t.Fatalf("close help: %v", err)
+	if err := app.closePopup(nil); err != nil {
+		t.Fatalf("close popup: %v", err)
 	}
-	if app.showHelp {
-		t.Fatal("showHelp = true, want false")
+	if app.popup != nil {
+		t.Fatal("popup is not nil, want closed popup")
 	}
 }
 

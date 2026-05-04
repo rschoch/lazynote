@@ -30,6 +30,7 @@ toolchain.
 - [Development](#development)
 - [Roadmap](#roadmap)
 - [Releases](#releases)
+- [Acknowledgements](#acknowledgements)
 - [License](#license)
 
 ## Why lazynote?
@@ -423,6 +424,12 @@ git push origin vX.Y.Z
 
 GitHub Actions runs tests and publishes release artifacts. Publishing apt/yum/apk
 repositories or Homebrew taps is a separate distribution step.
+
+## Acknowledgements
+
+`lazynote` takes a lot of inspiration from
+[LazyGit](https://github.com/jesseduffield/lazygit), especially around keeping a
+terminal UI fast, keyboard-driven, and practical without making it feel heavy.
 
 ## License
 

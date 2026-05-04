@@ -15,7 +15,7 @@ const (
 	notesView  = "notes"
 	detailView = "detail"
 	statusView = "status"
-	helpView   = "help"
+	popupView  = "popup"
 
 	defaultListWidth = 28
 	minListWidth     = 22
@@ -48,7 +48,7 @@ type App struct {
 	pendingDeleteID string
 	status          string
 	statusMode      statusMode
-	showHelp        bool
+	popup           *Popup
 	copyText        func(string) error
 	filterQuery     string
 	searchInput     string
@@ -162,7 +162,7 @@ func (a *App) keybindings(g *gocui.Gui) error {
 		key     interface{}
 		handler func(*gocui.Gui, *gocui.View) error
 	}{
-		{"", 'q', a.quitOrCloseHelp},
+		{"", 'q', a.quitOrClosePopup},
 		{"", gocui.KeyCtrlC, quit},
 		{"", '?', a.toggleHelp},
 		{"", gocui.KeyArrowDown, a.down},
@@ -181,9 +181,10 @@ func (a *App) keybindings(g *gocui.Gui) error {
 		{"", gocui.KeyArrowRight, a.focusDetail},
 		{statusView, gocui.KeyEnter, a.confirmSearch},
 		{statusView, gocui.KeyEsc, a.cancelSearch},
-		{helpView, 'q', a.closeHelp},
-		{helpView, '?', a.closeHelp},
-		{helpView, gocui.KeyEsc, a.closeHelp},
+		{popupView, 'q', a.closePopupKey},
+		{popupView, '?', a.closePopupKey},
+		{popupView, gocui.KeyEsc, a.closePopupKey},
+		{popupView, gocui.KeyEnter, a.closePopupKey},
 	}
 
 	for _, binding := range bindings {
@@ -214,12 +215,12 @@ func (a *App) layout(g *gocui.Gui) error {
 	if err := a.layoutStatus(g, -1, statusTop, maxX, maxY); err != nil {
 		return err
 	}
-	if a.showHelp {
-		if err := a.layoutHelp(g, maxX, maxY); err != nil {
+	if a.hasPopup() {
+		if err := a.layoutPopup(g, maxX, maxY); err != nil {
 			return err
 		}
 	} else {
-		_ = g.DeleteView(helpView)
+		_ = g.DeleteView(popupView)
 	}
 
 	return a.setCurrentView(g)
@@ -363,65 +364,6 @@ func (a *App) layoutStatus(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	return nil
 }
 
-func (a *App) layoutHelp(g *gocui.Gui, maxX, maxY int) error {
-	theme := a.themeColors()
-	width := 50
-	if maxX < width+4 {
-		width = maxX - 4
-	}
-	if width < 30 {
-		width = maxX - 2
-	}
-	height := 17
-	if maxY < height+4 {
-		height = maxY - 4
-	}
-	if height < 10 {
-		height = maxY - 2
-	}
-
-	x0 := (maxX - width) / 2
-	y0 := (maxY - height) / 2
-	if x0 < 0 {
-		x0 = 0
-	}
-	if y0 < 0 {
-		y0 = 0
-	}
-	v, err := g.SetView(helpView, x0, y0, x0+width, y0+height, 0)
-	if err != nil && !errors.Is(err, gocui.ErrUnknownView) {
-		return err
-	}
-
-	v.Title = " Help "
-	v.TitleColor = theme.Title
-	v.FrameColor = theme.ActiveBorder
-	v.FrameRunes = roundedFrameRunes
-	v.BgColor = theme.DefaultBg
-	v.FgColor = theme.DefaultFg
-	v.Wrap = false
-	v.Clear()
-
-	lines := []string{
-		"↑↓        move selection or scroll body",
-		"← →       switch list/body focus",
-		"Pg        page through the body",
-		"/         filter title, body, or #tag",
-		"Esc       clear filter or close help",
-		"c         copy selected title/body",
-		"e         edit selected note",
-		"p         pin or unpin selected note",
-		"d         delete; press twice to confirm",
-		"r         reload notes from disk",
-		"?         close this help",
-		"q         close this help",
-	}
-	for _, line := range lines {
-		fmt.Fprintln(v, fitLine(line, width-2))
-	}
-	return nil
-}
-
 func (a *App) statusLine() string {
 	return a.statusLineForWidth(0)
 }
@@ -531,7 +473,7 @@ func (a *App) selectedNote() (notes.Note, bool) {
 }
 
 func (a *App) up(g *gocui.Gui, v *gocui.View) error {
-	if a.showHelp {
+	if a.hasPopup() {
 		return nil
 	}
 	if a.activePane == paneDetail {
@@ -550,7 +492,7 @@ func (a *App) up(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) down(g *gocui.Gui, v *gocui.View) error {
-	if a.showHelp {
+	if a.hasPopup() {
 		return nil
 	}
 	if a.activePane == paneDetail {
@@ -569,7 +511,7 @@ func (a *App) down(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) focusNotes(g *gocui.Gui, v *gocui.View) error {
-	if a.showHelp {
+	if a.hasPopup() {
 		return nil
 	}
 	a.activePane = paneNotes
@@ -580,7 +522,7 @@ func (a *App) focusNotes(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) focusDetail(g *gocui.Gui, v *gocui.View) error {
-	if a.showHelp {
+	if a.hasPopup() {
 		return nil
 	}
 	a.activePane = paneDetail
@@ -591,14 +533,14 @@ func (a *App) focusDetail(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) detailUp(g *gocui.Gui, v *gocui.View) error {
-	if a.showHelp {
+	if a.hasPopup() {
 		return nil
 	}
 	return a.scrollDetail(g, -detailPageSize(g))
 }
 
 func (a *App) detailDown(g *gocui.Gui, v *gocui.View) error {
-	if a.showHelp {
+	if a.hasPopup() {
 		return nil
 	}
 	return a.scrollDetail(g, detailPageSize(g))
@@ -629,7 +571,7 @@ func (a *App) scrollDetail(g *gocui.Gui, delta int) error {
 }
 
 func (a *App) delete(g *gocui.Gui, v *gocui.View) error {
-	if a.showHelp {
+	if a.hasPopup() {
 		return nil
 	}
 	note, ok := a.selectedNote()
@@ -659,7 +601,7 @@ func (a *App) delete(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) togglePin(g *gocui.Gui, v *gocui.View) error {
-	if a.showHelp {
+	if a.hasPopup() {
 		return nil
 	}
 	note, ok := a.selectedNote()
@@ -686,7 +628,7 @@ func (a *App) togglePin(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) copy(g *gocui.Gui, v *gocui.View) error {
-	if a.showHelp {
+	if a.hasPopup() {
 		return nil
 	}
 	note, ok := a.selectedNote()
@@ -763,37 +705,11 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
 
-func (a *App) quitOrCloseHelp(g *gocui.Gui, v *gocui.View) error {
-	if a.showHelp {
-		return a.closeHelp(g, v)
+func (a *App) quitOrClosePopup(g *gocui.Gui, v *gocui.View) error {
+	if a.hasPopup() {
+		return a.closePopup(g)
 	}
 	return gocui.ErrQuit
-}
-
-func (a *App) toggleHelp(g *gocui.Gui, v *gocui.View) error {
-	if a.showHelp {
-		return a.closeHelp(g, v)
-	}
-	if a.inputMode == inputSearch {
-		return nil
-	}
-	a.showHelp = true
-	a.pendingDeleteID = ""
-	a.status = "Help"
-	a.statusMode = statusMessage
-	return a.setCurrentView(g)
-}
-
-func (a *App) closeHelp(g *gocui.Gui, v *gocui.View) error {
-	a.showHelp = false
-	if a.status == "Help" {
-		a.status = ""
-		a.statusMode = statusDefault
-	}
-	if g != nil {
-		_ = g.DeleteView(helpView)
-	}
-	return a.setCurrentView(g)
 }
 
 func (a *App) writeClipboard(text string) error {
@@ -823,8 +739,8 @@ func (a *App) setCurrentView(g *gocui.Gui) error {
 		return nil
 	}
 
-	if a.showHelp {
-		_, err := g.SetCurrentView(helpView)
+	if a.hasPopup() {
+		_, err := g.SetCurrentView(popupView)
 		if errors.Is(err, gocui.ErrUnknownView) {
 			return nil
 		}
