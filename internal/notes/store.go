@@ -21,6 +21,9 @@ const (
 	lockStaleAfter   = 5 * time.Minute
 )
 
+// ErrNoteNotFound reports that a mutation target no longer exists.
+var ErrNoteNotFound = errors.New("note not found")
+
 // Note is the persisted representation of a lazynote entry.
 type Note struct {
 	ID        string     `json:"id"`
@@ -124,32 +127,35 @@ func (s *Store) AppendWithTags(title, body string, tags []string) (Note, error) 
 }
 
 // Delete removes a note by ID and returns the updated list.
-func (s *Store) Delete(id string) ([]Note, error) {
+func (s *Store) Delete(id string) ([]Note, bool, error) {
 	var updated []Note
+	var deleted bool
 	err := s.withLock(func() error {
 		loaded, err := s.loadUnlocked()
 		if err != nil {
 			return err
 		}
 
-		updated = loaded[:0]
+		updated = make([]Note, 0, len(loaded))
 		for _, note := range loaded {
-			if note.ID != id {
-				updated = append(updated, note)
+			if note.ID == id {
+				deleted = true
+				continue
 			}
+			updated = append(updated, note)
 		}
 
-		if len(updated) == len(loaded) {
-			return nil
+		if !deleted {
+			return noteNotFoundError(id)
 		}
 
 		return s.saveUnlocked(updated)
 	})
 	if err != nil {
-		return nil, err
+		return updated, deleted, err
 	}
 
-	return updated, nil
+	return updated, deleted, nil
 }
 
 // Update replaces the title and body for a note by ID and returns the updated list.
@@ -178,7 +184,7 @@ func (s *Store) Update(id, title, body string) ([]Note, bool, error) {
 			return s.saveUnlocked(updated)
 		}
 
-		return fmt.Errorf("note not found: %s", id)
+		return noteNotFoundError(id)
 	})
 	if err != nil {
 		return nil, false, err
@@ -211,7 +217,7 @@ func (s *Store) SetPinned(id string, pinned bool) ([]Note, bool, error) {
 			return s.saveUnlocked(updated)
 		}
 
-		return fmt.Errorf("note not found: %s", id)
+		return noteNotFoundError(id)
 	})
 	if err != nil {
 		return nil, false, err
@@ -241,7 +247,7 @@ func (s *Store) TogglePinned(id string) ([]Note, bool, error) {
 			return s.saveUnlocked(updated)
 		}
 
-		return fmt.Errorf("note not found: %s", id)
+		return noteNotFoundError(id)
 	})
 	if err != nil {
 		return nil, false, err
@@ -279,7 +285,7 @@ func (s *Store) AddTags(id string, tags []string) ([]Note, bool, error) {
 			return s.saveUnlocked(updated)
 		}
 
-		return fmt.Errorf("note not found: %s", id)
+		return noteNotFoundError(id)
 	})
 	if err != nil {
 		return nil, false, err
@@ -310,7 +316,7 @@ func (s *Store) RemoveTags(id string, tags []string) ([]Note, bool, error) {
 				continue
 			}
 
-			kept := updated[i].Tags[:0]
+			kept := make([]string, 0, len(updated[i].Tags))
 			for _, tag := range updated[i].Tags {
 				if _, ok := removeSet[tag]; !ok {
 					kept = append(kept, tag)
@@ -319,13 +325,13 @@ func (s *Store) RemoveTags(id string, tags []string) ([]Note, bool, error) {
 			if sameTags(updated[i].Tags, kept) {
 				return nil
 			}
-			updated[i].Tags = append([]string(nil), kept...)
+			updated[i].Tags = kept
 			touch(&updated[i])
 			changed = true
 			return s.saveUnlocked(updated)
 		}
 
-		return fmt.Errorf("note not found: %s", id)
+		return noteNotFoundError(id)
 	})
 	if err != nil {
 		return nil, false, err
@@ -412,6 +418,10 @@ func sameTags(a, b []string) bool {
 	return true
 }
 
+func noteNotFoundError(id string) error {
+	return fmt.Errorf("%w: %s", ErrNoteNotFound, id)
+}
+
 // Save replaces all persisted notes.
 func (s *Store) Save(notes []Note) error {
 	return s.withLock(func() error {
@@ -422,6 +432,9 @@ func (s *Store) Save(notes []Note) error {
 func (s *Store) saveUnlocked(notes []Note) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return fmt.Errorf("create notes directory: %w", err)
+	}
+	if notes == nil {
+		notes = []Note{}
 	}
 
 	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".notes-*.json")

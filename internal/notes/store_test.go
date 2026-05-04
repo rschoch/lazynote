@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,15 +31,54 @@ func TestStoreAppendLoadDelete(t *testing.T) {
 		t.Fatalf("loaded unexpected notes: %#v", loaded)
 	}
 
-	updated, err := store.Delete(first.ID)
+	updated, deleted, err := store.Delete(first.ID)
 	if err != nil {
 		t.Fatalf("delete note: %v", err)
+	}
+	if !deleted {
+		t.Fatal("deleted = false, want true")
 	}
 	if len(updated) != 1 {
 		t.Fatalf("kept %d notes, want 1", len(updated))
 	}
 	if updated[0].Title != "second" {
 		t.Fatalf("kept unexpected note: %#v", updated[0])
+	}
+}
+
+func TestStoreDeleteMissingNoteReturnsLoadedNotes(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.Append("first", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	updated, deleted, err := store.Delete("missing")
+	if !errors.Is(err, ErrNoteNotFound) {
+		t.Fatalf("delete missing err = %v, want ErrNoteNotFound", err)
+	}
+	if deleted {
+		t.Fatal("deleted = true, want false")
+	}
+	if len(updated) != 1 || updated[0].ID != note.ID {
+		t.Fatalf("updated = %#v, want unchanged loaded note", updated)
+	}
+}
+
+func TestStoreSaveNilWritesEmptyArray(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	store := NewStore(path)
+
+	if err := store.Save(nil); err != nil {
+		t.Fatalf("save nil notes: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read saved notes: %v", err)
+	}
+	if string(data) != "[]\n" {
+		t.Fatalf("saved notes = %q, want empty JSON array", data)
 	}
 }
 

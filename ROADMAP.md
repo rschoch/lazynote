@@ -21,6 +21,7 @@ commands that are easy for humans, scripts, and coding agents to use.
 
 ## Future Candidates
 
+- Create notes from inside the TUI using the configured external editor.
 - Fuzzy ranking for search results while keeping plain substring matching as the
   predictable baseline.
 - A compact preview line option for the note list.

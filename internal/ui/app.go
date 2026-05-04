@@ -317,7 +317,7 @@ func (a *App) layoutDetail(g *gocui.Gui, x0, y0, x1, y1 int) error {
 		if a.filterQuery != "" {
 			fmt.Fprintln(v, "No matching note.")
 		} else {
-			fmt.Fprintln(v, "Nothing saved yet.")
+			fmt.Fprintln(v, "No notes yet.")
 		}
 		return nil
 	}
@@ -586,8 +586,15 @@ func (a *App) delete(g *gocui.Gui, v *gocui.View) error {
 		return nil
 	}
 
-	updated, err := a.store.Delete(note.ID)
+	updated, _, err := a.store.Delete(note.ID)
 	if err != nil {
+		if errors.Is(err, notes.ErrNoteNotFound) {
+			a.applyLoadedNotes(updated, "")
+			a.pendingDeleteID = ""
+			a.status = fmt.Sprintf("%q was already deleted", note.Title)
+			a.statusMode = statusMessage
+			return nil
+		}
 		a.status = fmt.Sprintf("Delete failed: %v", err)
 		a.statusMode = statusMessage
 		return nil

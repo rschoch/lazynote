@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -420,7 +421,7 @@ func TestReloadNotesFromDiskClampsDeletedSelection(t *testing.T) {
 	app.detailOffset = 4
 	app.pendingDeleteID = first.ID
 	app.statusMode = statusDeleteArmed
-	if _, err := store.Delete(first.ID); err != nil {
+	if _, _, err := store.Delete(first.ID); err != nil {
 		t.Fatalf("delete external note: %v", err)
 	}
 
@@ -450,7 +451,7 @@ func TestReloadNotesFromDiskClearsLastDeletedNote(t *testing.T) {
 	}
 
 	app := loadedApp(t, store)
-	if _, err := store.Delete(note.ID); err != nil {
+	if _, _, err := store.Delete(note.ID); err != nil {
 		t.Fatalf("delete external note: %v", err)
 	}
 
@@ -466,6 +467,103 @@ func TestReloadNotesFromDiskClearsLastDeletedNote(t *testing.T) {
 	}
 	if _, ok := app.selectedNote(); ok {
 		t.Fatal("selectedNote ok = true, want no selected note")
+	}
+}
+
+func TestReloadNotesFromDiskClearsDeletedNotesFile(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	if _, err := store.Append("only note", "only body"); err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	app := loadedApp(t, store)
+	if err := os.Remove(store.Path()); err != nil {
+		t.Fatalf("remove notes file: %v", err)
+	}
+
+	if err := app.reloadNotesFromDisk("Notes updated"); err != nil {
+		t.Fatalf("reload notes: %v", err)
+	}
+
+	if len(app.notes) != 0 {
+		t.Fatalf("visible notes = %d, want empty list", len(app.notes))
+	}
+	if len(app.sourceNotes()) != 0 {
+		t.Fatalf("source notes = %d, want empty source", len(app.sourceNotes()))
+	}
+	if _, ok := app.selectedNote(); ok {
+		t.Fatal("selectedNote ok = true, want no selected note")
+	}
+}
+
+func TestReloadNotesFromDiskClearsDeletedFilteredMatch(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	work, err := store.AppendWithTags("work note", "body", []string{"work"})
+	if err != nil {
+		t.Fatalf("append work note: %v", err)
+	}
+	home, err := store.AppendWithTags("home note", "body", []string{"home"})
+	if err != nil {
+		t.Fatalf("append home note: %v", err)
+	}
+
+	app := loadedApp(t, store)
+	app.setFilterQuery("#work")
+	if len(app.notes) != 1 || app.notes[0].ID != work.ID {
+		t.Fatalf("filtered notes = %#v, want work note", app.notes)
+	}
+	if _, _, err := store.Delete(work.ID); err != nil {
+		t.Fatalf("delete external filtered note: %v", err)
+	}
+
+	if err := app.reloadNotesFromDisk("Notes updated"); err != nil {
+		t.Fatalf("reload notes: %v", err)
+	}
+
+	if len(app.sourceNotes()) != 1 || app.sourceNotes()[0].ID != home.ID {
+		t.Fatalf("source notes = %#v, want remaining home note", app.sourceNotes())
+	}
+	if len(app.notes) != 0 {
+		t.Fatalf("visible notes = %d, want no filtered matches", len(app.notes))
+	}
+	if _, ok := app.selectedNote(); ok {
+		t.Fatal("selectedNote ok = true, want no selected note")
+	}
+	if app.filterQuery != "#work" {
+		t.Fatalf("filterQuery = %q, want preserved filter", app.filterQuery)
+	}
+}
+
+func TestDeleteStaleSelectedNoteRefreshesVisibleState(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.Append("stale note", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	app := loadedApp(t, store)
+	if _, _, err := store.Delete(note.ID); err != nil {
+		t.Fatalf("delete external note: %v", err)
+	}
+
+	if err := app.delete(nil, nil); err != nil {
+		t.Fatalf("delete first press: %v", err)
+	}
+	if err := app.delete(nil, nil); err != nil {
+		t.Fatalf("delete second press: %v", err)
+	}
+
+	if len(app.notes) != 0 {
+		t.Fatalf("visible notes = %d, want empty list", len(app.notes))
+	}
+	if len(app.sourceNotes()) != 0 {
+		t.Fatalf("source notes = %d, want empty source", len(app.sourceNotes()))
+	}
+	if _, ok := app.selectedNote(); ok {
+		t.Fatal("selectedNote ok = true, want no selected note")
+	}
+	if !strings.Contains(app.status, "already deleted") {
+		t.Fatalf("status = %q, want already deleted message", app.status)
 	}
 }
 
@@ -806,5 +904,8 @@ func loadedApp(t *testing.T, store *notes.Store) *App {
 		t.Fatalf("load notes: %v", err)
 	}
 
-	return &App{store: store, notes: loaded}
+	app := &App{store: store, theme: DefaultTheme(), settings: DefaultSettings()}
+	app.allNotes = app.orderedNotes(loaded)
+	app.applyFilter("")
+	return app
 }

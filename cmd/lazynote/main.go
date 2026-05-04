@@ -403,7 +403,7 @@ func runDelete(store *notes.Store, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if _, err := store.Delete(note.ID); err != nil {
+	if _, _, err := store.Delete(note.ID); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "Deleted %s\t%s\n", note.ID, oneLine(note.Title))

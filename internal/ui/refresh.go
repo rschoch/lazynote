@@ -102,6 +102,10 @@ func (a *App) refreshFailed(err error) {
 func (a *App) applyLoadedNotes(loaded []notes.Note, status string) bool {
 	ordered := a.orderedNotes(loaded)
 	if sameNotes(a.sourceNotes(), ordered) {
+		if a.allNotes == nil {
+			a.allNotes = ordered
+		}
+		a.reapplyFilter()
 		return false
 	}
 
@@ -127,6 +131,14 @@ func (a *App) applyLoadedNotes(loaded []notes.Note, status string) bool {
 		a.statusMode = statusMessage
 	}
 	return true
+}
+
+func (a *App) reapplyFilter() {
+	selectedID := ""
+	if note, ok := a.selectedNote(); ok {
+		selectedID = note.ID
+	}
+	a.applyFilter(selectedID)
 }
 
 func (a *App) reloadNotesFromDisk(status string) error {
