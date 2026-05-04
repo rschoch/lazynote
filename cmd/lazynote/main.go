@@ -107,11 +107,11 @@ func runAppendOrTUI(store *notes.Store, args []string, stdin io.Reader, stdout i
 		return err
 	}
 	if !appendNote {
-		theme, err := config.LoadTheme()
+		theme, settings, err := config.LoadUI()
 		if err != nil {
 			return err
 		}
-		return ui.New(store, ui.WithTheme(theme)).Run()
+		return ui.New(store, ui.WithTheme(theme), ui.WithSettings(settings)).Run()
 	}
 	if _, err := store.Append(title, body); err != nil {
 		return err

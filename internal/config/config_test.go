@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/awesome-gocui/gocui"
 	"github.com/rschoch/lazynote/internal/ui"
@@ -103,5 +104,38 @@ func TestLoadThemeEnvOverridesConfigFile(t *testing.T) {
 	}
 	if theme.ActiveBorder == ui.DefaultTheme().ActiveBorder {
 		t.Fatal("active border matched default theme, want high-contrast theme")
+	}
+}
+
+func TestResolveUISettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	data := []byte(`{
+  "tui": {
+    "refreshIntervalSeconds": 3,
+    "noteOrder": "newest-first",
+    "autoSelectNewNotes": true
+  }
+}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	settings, err := cfg.ResolveUISettings()
+	if err != nil {
+		t.Fatalf("resolve UI settings: %v", err)
+	}
+
+	if settings.RefreshInterval != 3*time.Second {
+		t.Fatalf("RefreshInterval = %v, want 3s", settings.RefreshInterval)
+	}
+	if settings.NoteOrder != ui.OrderNewestFirst {
+		t.Fatalf("NoteOrder = %q, want newest-first", settings.NoteOrder)
+	}
+	if !settings.AutoSelectNewNotes {
+		t.Fatal("AutoSelectNewNotes = false, want true")
 	}
 }
