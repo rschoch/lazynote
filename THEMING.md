@@ -36,6 +36,19 @@ Minimal config:
 }
 ```
 
+The same config file also holds non-color TUI behavior under the `tui` key:
+
+```json
+{
+  "theme": "mono",
+  "tui": {
+    "refreshIntervalSeconds": 1,
+    "noteOrder": "newest-first",
+    "autoSelectNewNotes": false
+  }
+}
+```
+
 Use another config file for one run:
 
 ```sh

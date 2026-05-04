@@ -24,6 +24,7 @@ toolchain.
   - [Codex Install](#codex-install)
   - [Claude Code Install](#claude-code-install)
 - [TUI](#tui)
+  - [TUI Behavior](#tui-behavior)
   - [Themes](#themes)
 - [Storage](#storage)
 - [Development](#development)
@@ -152,6 +153,7 @@ lazynote list
 lazynote show <id>
 lazynote show --body <id>
 lazynote search packaging
+lazynote backup
 lazynote export markdown
 lazynote export json
 lazynote path
@@ -160,7 +162,12 @@ lazynote path
 `list` prints tab-separated `id`, `created_at`, and `title` fields. `show`
 accepts a full ID or a unique ID prefix.
 
-Command words such as `list`, `show`, `search`, `path`, and `export` are
+`backup` prints the backup file path. With no path it writes a timestamped JSON
+copy under a `backups` directory next to the notes file. Pass a file path to
+choose the exact destination, or an existing directory for a timestamped backup
+inside that directory.
+
+Command words such as `list`, `show`, `search`, `path`, `backup`, and `export` are
 reserved when they are the first argument. Use `--` to use one as a title:
 
 ```sh
@@ -225,6 +232,8 @@ lazynote
 ```
 
 The TUI shows note titles on the left and the selected note body on the right.
+It automatically reloads when the notes file changes, so notes added from
+another terminal tab, script, or coding agent appear while the TUI stays open.
 The bottom status line shows context-specific key hints.
 
 Keys:
@@ -235,12 +244,37 @@ Keys:
 - up: move or scroll up in the active pane
 - PageDown: scroll note body down
 - PageUp: scroll note body up
+- `/`: filter notes by title or body; Enter applies, Esc cancels
+- `r`: reload notes from disk now
+- `e`: edit the selected note in `$VISUAL`, `$EDITOR`, or `vi`
 - `c`: copy the selected title or note body
 - `d` / delete: arm deletion; press `d` again to confirm
+- Esc: clear the active filter
 - `q` / Ctrl-C: quit
 
-Copy uses terminal clipboard support. Fonts, glyph rendering, and colors depend
-on your terminal emulator.
+Copy uses terminal clipboard support. Editing opens a temporary file whose first
+line is the note title and whose remaining content is the note body. Fonts,
+glyph rendering, and colors depend on your terminal emulator.
+
+### TUI Behavior
+
+TUI behavior is configured in `~/.config/lazynote/config.json`:
+
+```json
+{
+  "tui": {
+    "refreshIntervalSeconds": 1,
+    "noteOrder": "oldest-first",
+    "autoSelectNewNotes": false
+  }
+}
+```
+
+Supported values:
+
+- `refreshIntervalSeconds`: how often the open TUI checks for external changes
+- `noteOrder`: `oldest-first` or `newest-first`
+- `autoSelectNewNotes`: jump to newly arrived notes after auto-refresh
 
 ### Themes
 
@@ -276,13 +310,16 @@ LAZYNOTE_PATH=/tmp/lazynote-dev.json lazynote list
 Back up your notes:
 
 ```sh
-mkdir -p ~/backup/lazynote
-cp "$(lazynote path)" ~/backup/lazynote/notes.json
+lazynote backup
+lazynote backup ~/backup/lazynote
+lazynote backup ~/backup/lazynote/notes.json
 ```
 
 Because storage is one JSON file, it can be synced with tools like Syncthing,
-Dropbox, iCloud Drive, or a private dotfiles repository. Stop `lazynote` before
-replacing the file manually.
+Dropbox, iCloud Drive, or a private dotfiles repository. The TUI reloads when
+the file changes, including atomic replacements. Writes use a small lock file
+next to the notes file so concurrent CLI, TUI, script, and agent writes do not
+silently overwrite each other.
 
 ## Development
 
