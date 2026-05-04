@@ -28,6 +28,7 @@ toolchain.
   - [Themes](#themes)
 - [Storage](#storage)
 - [Development](#development)
+- [Roadmap](#roadmap)
 - [Releases](#releases)
 - [License](#license)
 
@@ -45,12 +46,16 @@ toolchain.
 # take simple note: $ lazynote <title> <body>
 lazynote showerthought 'Running from the cops is the ultimate double or nothing.'
 
+# tag a note while capturing it
+lazynote --tag work idea 'Use a single notes file so agents and humans share context.'
+
 # piped body with an inferred title
 printf '## Session abc123\n- fixed flaky test\n' | lazynote
 
 # retrieve context
 lazynote list
 lazynote search flaky
+lazynote search '#work'
 lazynote export json
 ```
 
@@ -123,6 +128,7 @@ Capture a note:
 
 ```sh
 lazynote idea 'Use a single notes file so agents and humans share context.'
+lazynote --tag work --tag idea idea 'Keep note metadata small and useful.'
 ```
 
 Capture from stdin:
@@ -153,22 +159,43 @@ lazynote list
 lazynote show <id>
 lazynote show --body <id>
 lazynote search packaging
+lazynote search '#work'
 lazynote backup
 lazynote export markdown
 lazynote export json
 lazynote path
 ```
 
-`list` prints tab-separated `id`, `created_at`, and `title` fields. `show`
-accepts a full ID or a unique ID prefix.
+`list` prints tab-separated `id`, `created_at`, and `title` fields, plus a
+metadata field when a note is pinned or tagged. `show` accepts a full ID or a
+unique ID prefix.
+
+Manage existing notes:
+
+```sh
+lazynote edit <id>
+lazynote edit <id> 'new title' 'new body'
+lazynote edit <id> 'new title' - < body.md
+lazynote delete <id>
+lazynote pin <id>
+lazynote unpin <id>
+lazynote tag <id> work idea
+lazynote untag <id> work
+lazynote tags <id>
+```
+
+`edit <id>` opens `$VISUAL`, `$EDITOR`, or `vi`. Direct edit commands replace
+the title and body without opening an editor. `tag` normalizes tags to
+lower-case names and accepts optional leading `#`.
 
 `backup` prints the backup file path. With no path it writes a timestamped JSON
 copy under a `backups` directory next to the notes file. Pass a file path to
 choose the exact destination, or an existing directory for a timestamped backup
 inside that directory.
 
-Command words such as `list`, `show`, `search`, `path`, `backup`, and `export` are
-reserved when they are the first argument. Use `--` to use one as a title:
+Command words such as `list`, `show`, `search`, `edit`, `delete`, `pin`,
+`unpin`, `tag`, `untag`, `tags`, `path`, `backup`, and `export` are reserved
+when they are the first argument. Use `--` to use one as a title:
 
 ```sh
 lazynote -- search 'a note whose title is search'
@@ -244,20 +271,22 @@ Keys:
 - up: move or scroll up in the active pane
 - PageDown: scroll note body down
 - PageUp: scroll note body up
-- `/`: filter notes by title or body; Enter applies, Esc cancels
+- `/`: filter notes by title, body, or `#tag`; Enter applies, Esc cancels
 - `r`: reload notes from disk now
 - `e`: edit the selected note in `$VISUAL`, `$EDITOR`, or `vi`
 - `p`: pin or unpin the selected note
+- `?`: show or hide the help overlay
 - `c`: copy the selected title or note body
 - `d` / delete: arm deletion; press `d` again to confirm
 - Esc: clear the active filter
 - `q` / Ctrl-C: quit
 
 Copy uses terminal clipboard support. Editing opens a temporary file whose first
-line is the note title and whose remaining content is the note body. Pinned
-notes stay at the top of the list and use `▴` in the list gutter. Notes that
-arrive from another process while the TUI is open use `●` until selected. Fonts,
-glyph rendering, and colors depend on your terminal emulator.
+line is the note title and whose remaining content is the note body. The note
+body pane shows tags and edited timestamps when present. Pinned notes stay at
+the top of the list and use `▴` in the list gutter. Notes that arrive from
+another process while the TUI is open use `●` until selected. Fonts, glyph
+rendering, and colors depend on your terminal emulator.
 
 ### TUI Behavior
 
@@ -322,7 +351,9 @@ Because storage is one JSON file, it can be synced with tools like Syncthing,
 Dropbox, iCloud Drive, or a private dotfiles repository. The TUI reloads when
 the file changes, including atomic replacements. Writes use a small lock file
 next to the notes file so concurrent CLI, TUI, script, and agent writes do not
-silently overwrite each other.
+silently overwrite each other. Newer versions may write optional `tags`,
+`updated_at`, and `pinned` fields; older notes without these fields continue to
+load normally.
 
 ## Development
 
@@ -365,6 +396,11 @@ Useful targets:
 - `make uninstall`: remove from `$(PREFIX)/bin`
 - `make clean`: remove local build and release artifacts
 - `make release-snapshot`: build local GoReleaser artifacts
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for lightweight future candidates and deliberately
+deferred ideas.
 
 ## Releases
 

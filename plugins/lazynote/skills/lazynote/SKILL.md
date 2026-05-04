@@ -26,6 +26,14 @@ Summarize the useful context here.
 EOF
 ```
 
+Add tags when they will make later retrieval easier:
+
+```sh
+lazynote --quiet --tag work --tag release 'session summary' - <<'EOF'
+Summarize the useful context here.
+EOF
+```
+
 For command output:
 
 ```sh
@@ -38,11 +46,16 @@ Use single quotes around literal shell text. If a title would collide with a com
 
 - List notes: `lazynote list`
 - Search notes: `lazynote search 'query'`
+- Search by tag: `lazynote search '#tag'`
 - Show a note: `lazynote show <id>`
 - Fetch only the body for context: `lazynote show --body <id>`
+- Edit a note: `lazynote edit <id> 'new title' 'new body'`
+- Delete a note: `lazynote delete <id>`
+- Pin or unpin a note: `lazynote pin <id>` or `lazynote unpin <id>`
+- Add or remove tags: `lazynote tag <id> work` or `lazynote untag <id> work`
 - Print the notes file path: `lazynote path`
 - Export everything: `lazynote export markdown` or `lazynote export json`
 
-`lazynote list` prints tab-separated `id`, `created_at`, and `title` fields. `show` accepts a full note ID or a unique ID prefix.
+`lazynote list` prints tab-separated `id`, `created_at`, and `title` fields, plus metadata when present. `show` accepts a full note ID or a unique ID prefix.
 
 Do not edit the notes JSON file directly unless the user explicitly asks for low-level recovery or repair.

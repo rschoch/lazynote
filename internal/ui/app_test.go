@@ -172,7 +172,7 @@ func TestStatusLineIncludesPositionAndKeys(t *testing.T) {
 	if strings.Contains(got, "2026") {
 		t.Fatalf("statusLine() = %q, want no selected-note timestamp", got)
 	}
-	for _, want := range []string{"2/2", "↑↓ nav", "→ body", "p pin", "d del", "q quit"} {
+	for _, want := range []string{"2/2", "↑↓ nav", "→ body", "p pin", "? help", "d del", "q quit"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
@@ -427,6 +427,24 @@ func TestFilterMatchesTitleAndBody(t *testing.T) {
 	}
 }
 
+func TestFilterMatchesTags(t *testing.T) {
+	app := &App{
+		allNotes: []notes.Note{
+			{ID: "one", Title: "release plan", Tags: []string{"work"}},
+			{ID: "two", Title: "grocery list", Tags: []string{"home"}},
+		},
+	}
+
+	app.setFilterQuery("#work")
+
+	if len(app.notes) != 1 {
+		t.Fatalf("filtered %d notes, want 1", len(app.notes))
+	}
+	if app.notes[0].ID != "one" {
+		t.Fatalf("filtered note = %q, want one", app.notes[0].ID)
+	}
+}
+
 func TestClearFilterRestoresNotes(t *testing.T) {
 	app := &App{
 		allNotes: []notes.Note{
@@ -661,6 +679,40 @@ func TestListLineShowsUnreadAndPinnedGutter(t *testing.T) {
 	}
 	if got := listLine(notes.Note{Title: "abc", Pinned: true}, false, true, 10); !strings.HasPrefix(got, "  ● abc") {
 		t.Fatalf("unread listLine() = %q, want unread glyph", got)
+	}
+}
+
+func TestNoteSubtitleIncludesTagsAndUpdatedAt(t *testing.T) {
+	updatedAt := time.Date(2026, 5, 4, 13, 0, 0, 0, time.Local)
+	note := notes.Note{
+		CreatedAt: time.Date(2026, 5, 4, 12, 0, 0, 0, time.Local),
+		UpdatedAt: &updatedAt,
+		Tags:      []string{"work", "idea"},
+	}
+
+	got := noteSubtitle(note)
+	for _, want := range []string{"2026-05-04 12:00", "edited 2026-05-04 13:00", "#work #idea"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("noteSubtitle() = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestHelpToggleSetsHelpMode(t *testing.T) {
+	app := &App{}
+
+	if err := app.toggleHelp(nil, nil); err != nil {
+		t.Fatalf("toggle help: %v", err)
+	}
+	if !app.showHelp {
+		t.Fatal("showHelp = false, want true")
+	}
+
+	if err := app.closeHelp(nil, nil); err != nil {
+		t.Fatalf("close help: %v", err)
+	}
+	if app.showHelp {
+		t.Fatal("showHelp = true, want false")
 	}
 }
 

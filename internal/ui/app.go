@@ -15,6 +15,7 @@ const (
 	notesView  = "notes"
 	detailView = "detail"
 	statusView = "status"
+	helpView   = "help"
 
 	defaultListWidth = 28
 	minListWidth     = 22
@@ -47,6 +48,7 @@ type App struct {
 	pendingDeleteID string
 	status          string
 	statusMode      statusMode
+	showHelp        bool
 	copyText        func(string) error
 	filterQuery     string
 	searchInput     string
@@ -160,8 +162,9 @@ func (a *App) keybindings(g *gocui.Gui) error {
 		key     interface{}
 		handler func(*gocui.Gui, *gocui.View) error
 	}{
-		{"", 'q', quit},
+		{"", 'q', a.quitOrCloseHelp},
 		{"", gocui.KeyCtrlC, quit},
+		{"", '?', a.toggleHelp},
 		{"", gocui.KeyArrowDown, a.down},
 		{"", gocui.KeyArrowUp, a.up},
 		{"", 'c', a.copy},
@@ -178,6 +181,9 @@ func (a *App) keybindings(g *gocui.Gui) error {
 		{"", gocui.KeyArrowRight, a.focusDetail},
 		{statusView, gocui.KeyEnter, a.confirmSearch},
 		{statusView, gocui.KeyEsc, a.cancelSearch},
+		{helpView, 'q', a.closeHelp},
+		{helpView, '?', a.closeHelp},
+		{helpView, gocui.KeyEsc, a.closeHelp},
 	}
 
 	for _, binding := range bindings {
@@ -207,6 +213,13 @@ func (a *App) layout(g *gocui.Gui) error {
 	}
 	if err := a.layoutStatus(g, -1, statusTop, maxX, maxY); err != nil {
 		return err
+	}
+	if a.showHelp {
+		if err := a.layoutHelp(g, maxX, maxY); err != nil {
+			return err
+		}
+	} else {
+		_ = g.DeleteView(helpView)
 	}
 
 	return a.setCurrentView(g)
@@ -309,7 +322,8 @@ func (a *App) layoutDetail(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	}
 
 	v.Title = " " + oneLine(note.Title) + " "
-	v.Subtitle = note.CreatedAt.Local().Format("2006-01-02 15:04")
+	width, _ := v.Size()
+	v.Subtitle = " " + fitLine(noteSubtitle(note), width-2) + " "
 	if note.Body != "" {
 		fmt.Fprintln(v, note.Body)
 	}
@@ -346,6 +360,65 @@ func (a *App) layoutStatus(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	g.Cursor = false
 	fmt.Fprint(v, fitLine(a.statusLineForWidth(width), width))
 
+	return nil
+}
+
+func (a *App) layoutHelp(g *gocui.Gui, maxX, maxY int) error {
+	theme := a.themeColors()
+	width := 50
+	if maxX < width+4 {
+		width = maxX - 4
+	}
+	if width < 30 {
+		width = maxX - 2
+	}
+	height := 17
+	if maxY < height+4 {
+		height = maxY - 4
+	}
+	if height < 10 {
+		height = maxY - 2
+	}
+
+	x0 := (maxX - width) / 2
+	y0 := (maxY - height) / 2
+	if x0 < 0 {
+		x0 = 0
+	}
+	if y0 < 0 {
+		y0 = 0
+	}
+	v, err := g.SetView(helpView, x0, y0, x0+width, y0+height, 0)
+	if err != nil && !errors.Is(err, gocui.ErrUnknownView) {
+		return err
+	}
+
+	v.Title = " Help "
+	v.TitleColor = theme.Title
+	v.FrameColor = theme.ActiveBorder
+	v.FrameRunes = roundedFrameRunes
+	v.BgColor = theme.DefaultBg
+	v.FgColor = theme.DefaultFg
+	v.Wrap = false
+	v.Clear()
+
+	lines := []string{
+		"↑↓        move selection or scroll body",
+		"← →       switch list/body focus",
+		"Pg        page through the body",
+		"/         filter title, body, or #tag",
+		"Esc       clear filter or close help",
+		"c         copy selected title/body",
+		"e         edit selected note",
+		"p         pin or unpin selected note",
+		"d         delete; press twice to confirm",
+		"r         reload notes from disk",
+		"?         close this help",
+		"q         close this help",
+	}
+	for _, line := range lines {
+		fmt.Fprintln(v, fitLine(line, width-2))
+	}
 	return nil
 }
 
@@ -393,18 +466,18 @@ func (a *App) statusHints() string {
 
 	if _, ok := a.selectedNote(); !ok {
 		if a.filterQuery != "" {
-			return "/ filter   Esc clear   r reload   q quit"
+			return "/ filter   Esc clear   r reload   ? help   q quit"
 		}
-		return "/ filter   r reload   q quit"
+		return "/ filter   r reload   ? help   q quit"
 	}
 
 	if a.activePane == paneDetail {
-		return "↑↓ scroll   Pg page   ← list   c copy   e edit   p pin   r reload   q quit"
+		return "↑↓ scroll   Pg page   ← list   c copy   e edit   p pin   r reload   ? help   q quit"
 	}
 	if a.filterQuery != "" {
-		return "↑↓ nav   → body   / filter   Esc clear   c copy   p pin   e edit   d del   r reload   q quit"
+		return "↑↓ nav   → body   / filter   Esc clear   c copy   p pin   e edit   d del   r reload   ? help   q quit"
 	}
-	return "↑↓ nav   → body   / filter   c copy   p pin   e edit   d del   r reload   q quit"
+	return "↑↓ nav   → body   / filter   c copy   p pin   e edit   d del   r reload   ? help   q quit"
 }
 
 func (a *App) compactStatusHints() string {
@@ -415,18 +488,18 @@ func (a *App) compactStatusHints() string {
 
 	if _, ok := a.selectedNote(); !ok {
 		if a.filterQuery != "" {
-			return "/   Esc   r   q"
+			return "/   Esc   r   ?   q"
 		}
-		return "/   r   q"
+		return "/   r   ?   q"
 	}
 
 	if a.activePane == paneDetail {
-		return "↑↓   Pg   ←   c   e   p   r   q"
+		return "↑↓   Pg   ←   c   e   p   r   ?   q"
 	}
 	if a.filterQuery != "" {
-		return "↑↓   →   /   Esc   c   p   e   d   r   q"
+		return "↑↓   →   /   Esc   c   p   e   d   r   ?   q"
 	}
-	return "↑↓   →   /   c   p   e   d   r   q"
+	return "↑↓   →   /   c   p   e   d   r   ?   q"
 }
 
 func (a *App) syncListCursor(v *gocui.View) {
@@ -458,6 +531,9 @@ func (a *App) selectedNote() (notes.Note, bool) {
 }
 
 func (a *App) up(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return nil
+	}
 	if a.activePane == paneDetail {
 		return a.scrollDetail(g, -1)
 	}
@@ -474,6 +550,9 @@ func (a *App) up(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) down(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return nil
+	}
 	if a.activePane == paneDetail {
 		return a.scrollDetail(g, 1)
 	}
@@ -490,6 +569,9 @@ func (a *App) down(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) focusNotes(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return nil
+	}
 	a.activePane = paneNotes
 	a.pendingDeleteID = ""
 	a.status = ""
@@ -498,6 +580,9 @@ func (a *App) focusNotes(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) focusDetail(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return nil
+	}
 	a.activePane = paneDetail
 	a.pendingDeleteID = ""
 	a.status = ""
@@ -506,10 +591,16 @@ func (a *App) focusDetail(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) detailUp(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return nil
+	}
 	return a.scrollDetail(g, -detailPageSize(g))
 }
 
 func (a *App) detailDown(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return nil
+	}
 	return a.scrollDetail(g, detailPageSize(g))
 }
 
@@ -538,6 +629,9 @@ func (a *App) scrollDetail(g *gocui.Gui, delta int) error {
 }
 
 func (a *App) delete(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return nil
+	}
 	note, ok := a.selectedNote()
 	if !ok {
 		return nil
@@ -565,6 +659,9 @@ func (a *App) delete(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) togglePin(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return nil
+	}
 	note, ok := a.selectedNote()
 	if !ok {
 		return nil
@@ -589,6 +686,9 @@ func (a *App) togglePin(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) copy(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return nil
+	}
 	note, ok := a.selectedNote()
 	if !ok {
 		a.pendingDeleteID = ""
@@ -663,6 +763,39 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
 
+func (a *App) quitOrCloseHelp(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return a.closeHelp(g, v)
+	}
+	return gocui.ErrQuit
+}
+
+func (a *App) toggleHelp(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return a.closeHelp(g, v)
+	}
+	if a.inputMode == inputSearch {
+		return nil
+	}
+	a.showHelp = true
+	a.pendingDeleteID = ""
+	a.status = "Help"
+	a.statusMode = statusMessage
+	return a.setCurrentView(g)
+}
+
+func (a *App) closeHelp(g *gocui.Gui, v *gocui.View) error {
+	a.showHelp = false
+	if a.status == "Help" {
+		a.status = ""
+		a.statusMode = statusDefault
+	}
+	if g != nil {
+		_ = g.DeleteView(helpView)
+	}
+	return a.setCurrentView(g)
+}
+
 func (a *App) writeClipboard(text string) error {
 	if a.copyText != nil {
 		return a.copyText(text)
@@ -688,6 +821,14 @@ func writeOSC52Clipboard(text string) error {
 func (a *App) setCurrentView(g *gocui.Gui) error {
 	if g == nil {
 		return nil
+	}
+
+	if a.showHelp {
+		_, err := g.SetCurrentView(helpView)
+		if errors.Is(err, gocui.ErrUnknownView) {
+			return nil
+		}
+		return err
 	}
 
 	if a.inputMode == inputSearch {
@@ -731,6 +872,17 @@ func (p pane) viewName() string {
 
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+func noteSubtitle(note notes.Note) string {
+	parts := []string{note.CreatedAt.Local().Format("2006-01-02 15:04")}
+	if note.UpdatedAt != nil {
+		parts = append(parts, "edited "+note.UpdatedAt.Local().Format("2006-01-02 15:04"))
+	}
+	if tags := notes.FormatTags(note.Tags); tags != "" {
+		parts = append(parts, tags)
+	}
+	return strings.Join(parts, "  ")
 }
 
 func listLine(note notes.Note, selected, unread bool, width int) string {

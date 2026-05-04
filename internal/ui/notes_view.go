@@ -81,8 +81,7 @@ func filterNotes(source []notes.Note, query string) []notes.Note {
 
 	filtered := make([]notes.Note, 0, len(source))
 	for _, note := range source {
-		if strings.Contains(strings.ToLower(note.Title), query) ||
-			strings.Contains(strings.ToLower(note.Body), query) {
+		if notes.MatchesQuery(note, query) {
 			filtered = append(filtered, note)
 		}
 	}

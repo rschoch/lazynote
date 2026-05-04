@@ -139,7 +139,7 @@ func (a *App) reloadNotesFromDisk(status string) error {
 }
 
 func (a *App) manualRefresh(g *gocui.Gui, v *gocui.View) error {
-	if a.inputMode == inputSearch {
+	if a.inputMode == inputSearch || a.showHelp {
 		return nil
 	}
 
@@ -165,7 +165,32 @@ func sameNotes(a, b []notes.Note) bool {
 			a[i].Title != b[i].Title ||
 			a[i].Body != b[i].Body ||
 			a[i].Pinned != b[i].Pinned ||
+			!sameTimePtr(a[i].UpdatedAt, b[i].UpdatedAt) ||
+			!sameStringSlice(a[i].Tags, b[i].Tags) ||
 			!a[i].CreatedAt.Equal(b[i].CreatedAt) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameTimePtr(a, b *time.Time) bool {
+	switch {
+	case a == nil && b == nil:
+		return true
+	case a == nil || b == nil:
+		return false
+	default:
+		return a.Equal(*b)
+	}
+}
+
+func sameStringSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
 			return false
 		}
 	}

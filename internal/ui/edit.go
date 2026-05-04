@@ -12,7 +12,7 @@ import (
 )
 
 func (a *App) edit(g *gocui.Gui, v *gocui.View) error {
-	if a.inputMode == inputSearch {
+	if a.inputMode == inputSearch || a.showHelp {
 		return nil
 	}
 
@@ -37,7 +37,7 @@ func (a *App) edit(g *gocui.Gui, v *gocui.View) error {
 					}
 				}()
 			}
-			return editNoteInExternalEditor(note, a.editor)
+			return EditNoteInExternalEditor(note, a.editor)
 		}
 	}
 
@@ -69,7 +69,8 @@ func (a *App) edit(g *gocui.Gui, v *gocui.View) error {
 	return a.setCurrentView(g)
 }
 
-func editNoteInExternalEditor(note notes.Note, editor string) (title, body string, changed bool, err error) {
+// EditNoteInExternalEditor opens a temporary editable note file in an external editor.
+func EditNoteInExternalEditor(note notes.Note, editor string) (title, body string, changed bool, err error) {
 	editor = resolveEditor(editor)
 	tmp, err := os.CreateTemp("", "lazynote-*.md")
 	if err != nil {

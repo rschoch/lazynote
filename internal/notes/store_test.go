@@ -91,6 +91,9 @@ func TestStoreUpdateChangesExistingNote(t *testing.T) {
 	if updated[0].Title != "new" || updated[0].Body != "new body" {
 		t.Fatalf("updated note = %#v, want new title and body", updated[0])
 	}
+	if updated[0].UpdatedAt == nil {
+		t.Fatal("updated_at is nil, want timestamp after update")
+	}
 }
 
 func TestStoreTogglePinned(t *testing.T) {
@@ -114,6 +117,79 @@ func TestStoreTogglePinned(t *testing.T) {
 	}
 	if pinned || updated[0].Pinned {
 		t.Fatalf("pinned = %v, note pinned = %v, want false", pinned, updated[0].Pinned)
+	}
+}
+
+func TestStoreSetPinned(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.Append("first", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	updated, changed, err := store.SetPinned(note.ID, true)
+	if err != nil {
+		t.Fatalf("set pinned: %v", err)
+	}
+	if !changed || !updated[0].Pinned {
+		t.Fatalf("changed = %v, pinned = %v, want true", changed, updated[0].Pinned)
+	}
+
+	updated, changed, err = store.SetPinned(note.ID, true)
+	if err != nil {
+		t.Fatalf("set pinned again: %v", err)
+	}
+	if changed || !updated[0].Pinned {
+		t.Fatalf("changed = %v, pinned = %v, want unchanged pinned note", changed, updated[0].Pinned)
+	}
+}
+
+func TestStoreAppendAndUpdateTags(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.AppendWithTags("first", "body", []string{" Work ", "#Idea", "work"})
+	if err != nil {
+		t.Fatalf("append tagged note: %v", err)
+	}
+	if got, want := strings.Join(note.Tags, ","), "work,idea"; got != want {
+		t.Fatalf("tags = %q, want %q", got, want)
+	}
+
+	updated, changed, err := store.AddTags(note.ID, []string{"Idea", "release"})
+	if err != nil {
+		t.Fatalf("add tags: %v", err)
+	}
+	if !changed {
+		t.Fatal("changed = false, want true")
+	}
+	if got, want := strings.Join(updated[0].Tags, ","), "work,idea,release"; got != want {
+		t.Fatalf("tags = %q, want %q", got, want)
+	}
+	if updated[0].UpdatedAt == nil {
+		t.Fatal("updated_at is nil, want timestamp after tag edit")
+	}
+
+	updated, changed, err = store.RemoveTags(note.ID, []string{"work"})
+	if err != nil {
+		t.Fatalf("remove tags: %v", err)
+	}
+	if !changed {
+		t.Fatal("changed = false, want true")
+	}
+	if got, want := strings.Join(updated[0].Tags, ","), "idea,release"; got != want {
+		t.Fatalf("tags = %q, want %q", got, want)
+	}
+}
+
+func TestMatchesQueryMatchesTags(t *testing.T) {
+	note := Note{Title: "release plan", Body: "ship packages", Tags: []string{"work", "idea"}}
+
+	for _, query := range []string{"release", "packages", "#work", "dea"} {
+		if !MatchesQuery(note, query) {
+			t.Fatalf("MatchesQuery(%q) = false, want true", query)
+		}
+	}
+	if MatchesQuery(note, "#missing") {
+		t.Fatal("MatchesQuery(#missing) = true, want false")
 	}
 }
 

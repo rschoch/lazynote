@@ -34,6 +34,9 @@ func (e searchEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modi
 }
 
 func (a *App) startSearch(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return nil
+	}
 	a.inputMode = inputSearch
 	a.searchOriginal = a.filterQuery
 	a.searchInput = a.filterQuery
@@ -80,6 +83,9 @@ func (a *App) cancelSearch(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) clearFilterKey(g *gocui.Gui, v *gocui.View) error {
+	if a.showHelp {
+		return a.closeHelp(g, v)
+	}
 	if a.inputMode == inputSearch {
 		return a.cancelSearch(g, v)
 	}

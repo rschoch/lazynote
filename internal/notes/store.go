@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -22,11 +23,13 @@ const (
 
 // Note is the persisted representation of a lazynote entry.
 type Note struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	CreatedAt time.Time `json:"created_at"`
-	Pinned    bool      `json:"pinned,omitempty"`
+	ID        string     `json:"id"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	Tags      []string   `json:"tags,omitempty"`
+	Pinned    bool       `json:"pinned,omitempty"`
 }
 
 // Store persists notes as a small JSON file.
@@ -89,6 +92,11 @@ func (s *Store) loadUnlocked() ([]Note, error) {
 
 // Append adds a new note and persists the full list.
 func (s *Store) Append(title, body string) (Note, error) {
+	return s.AppendWithTags(title, body, nil)
+}
+
+// AppendWithTags adds a new tagged note and persists the full list.
+func (s *Store) AppendWithTags(title, body string, tags []string) (Note, error) {
 	var note Note
 	err := s.withLock(func() error {
 		loaded, err := s.loadUnlocked()
@@ -102,6 +110,7 @@ func (s *Store) Append(title, body string) (Note, error) {
 			Title:     title,
 			Body:      body,
 			CreatedAt: now,
+			Tags:      NormalizeTags(tags),
 		}
 
 		loaded = append(loaded, note)
@@ -164,6 +173,40 @@ func (s *Store) Update(id, title, body string) ([]Note, bool, error) {
 			}
 			updated[i].Title = title
 			updated[i].Body = body
+			touch(&updated[i])
+			changed = true
+			return s.saveUnlocked(updated)
+		}
+
+		return fmt.Errorf("note not found: %s", id)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	return updated, changed, nil
+}
+
+// SetPinned sets the pinned state for a note by ID and returns the updated list.
+func (s *Store) SetPinned(id string, pinned bool) ([]Note, bool, error) {
+	var updated []Note
+	var changed bool
+	err := s.withLock(func() error {
+		loaded, err := s.loadUnlocked()
+		if err != nil {
+			return err
+		}
+
+		updated = append([]Note(nil), loaded...)
+		for i := range updated {
+			if updated[i].ID != id {
+				continue
+			}
+
+			if updated[i].Pinned == pinned {
+				return nil
+			}
+			updated[i].Pinned = pinned
 			changed = true
 			return s.saveUnlocked(updated)
 		}
@@ -205,6 +248,168 @@ func (s *Store) TogglePinned(id string) ([]Note, bool, error) {
 	}
 
 	return updated, pinned, nil
+}
+
+// AddTags adds tags to a note by ID and returns the updated list.
+func (s *Store) AddTags(id string, tags []string) ([]Note, bool, error) {
+	tags = NormalizeTags(tags)
+	var updated []Note
+	var changed bool
+	err := s.withLock(func() error {
+		loaded, err := s.loadUnlocked()
+		if err != nil {
+			return err
+		}
+
+		updated = append([]Note(nil), loaded...)
+		for i := range updated {
+			if updated[i].ID != id {
+				continue
+			}
+
+			merged := append([]string(nil), updated[i].Tags...)
+			merged = append(merged, tags...)
+			merged = NormalizeTags(merged)
+			if sameTags(updated[i].Tags, merged) {
+				return nil
+			}
+			updated[i].Tags = merged
+			touch(&updated[i])
+			changed = true
+			return s.saveUnlocked(updated)
+		}
+
+		return fmt.Errorf("note not found: %s", id)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	return updated, changed, nil
+}
+
+// RemoveTags removes tags from a note by ID and returns the updated list.
+func (s *Store) RemoveTags(id string, tags []string) ([]Note, bool, error) {
+	remove := NormalizeTags(tags)
+	removeSet := make(map[string]struct{}, len(remove))
+	for _, tag := range remove {
+		removeSet[tag] = struct{}{}
+	}
+
+	var updated []Note
+	var changed bool
+	err := s.withLock(func() error {
+		loaded, err := s.loadUnlocked()
+		if err != nil {
+			return err
+		}
+
+		updated = append([]Note(nil), loaded...)
+		for i := range updated {
+			if updated[i].ID != id {
+				continue
+			}
+
+			kept := updated[i].Tags[:0]
+			for _, tag := range updated[i].Tags {
+				if _, ok := removeSet[tag]; !ok {
+					kept = append(kept, tag)
+				}
+			}
+			if sameTags(updated[i].Tags, kept) {
+				return nil
+			}
+			updated[i].Tags = append([]string(nil), kept...)
+			touch(&updated[i])
+			changed = true
+			return s.saveUnlocked(updated)
+		}
+
+		return fmt.Errorf("note not found: %s", id)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	return updated, changed, nil
+}
+
+// NormalizeTags returns trimmed, lower-case, de-duplicated tag names.
+func NormalizeTags(tags []string) []string {
+	normalized := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		tag = strings.TrimLeft(tag, "#")
+		tag = strings.ToLower(strings.TrimSpace(tag))
+		if tag == "" {
+			continue
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+	return normalized
+}
+
+// FormatTags formats tags in the same compact form used by the CLI and TUI.
+func FormatTags(tags []string) string {
+	if len(tags) == 0 {
+		return ""
+	}
+
+	formatted := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		formatted = append(formatted, "#"+tag)
+	}
+	return strings.Join(formatted, " ")
+}
+
+// MatchesQuery reports whether a note matches a free-text or #tag query.
+func MatchesQuery(note Note, query string) bool {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return true
+	}
+
+	if strings.Contains(strings.ToLower(note.Title), query) ||
+		strings.Contains(strings.ToLower(note.Body), query) {
+		return true
+	}
+
+	tagQuery := strings.TrimPrefix(query, "#")
+	if tagQuery == "" {
+		return false
+	}
+	for _, tag := range note.Tags {
+		if strings.Contains(strings.ToLower(tag), tagQuery) {
+			return true
+		}
+	}
+	return false
+}
+
+func touch(note *Note) {
+	now := time.Now().UTC()
+	note.UpdatedAt = &now
+}
+
+func sameTags(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // Save replaces all persisted notes.

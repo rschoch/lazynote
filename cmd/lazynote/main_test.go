@@ -88,6 +88,24 @@ func TestRunAppendsNoteQuietlyWithTrailingFlag(t *testing.T) {
 	}
 }
 
+func TestRunAppendsTaggedNote(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	var stdout bytes.Buffer
+	if err := run([]string{"todo", "finish the slice", "--tag", "Work", "--tag=#Idea"}, nil, &stdout); err != nil {
+		t.Fatalf("run tagged append: %v", err)
+	}
+
+	loaded, err := notes.NewStore(path).Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if got, want := strings.Join(loaded[0].Tags, ","), "work,idea"; got != want {
+		t.Fatalf("tags = %q, want %q", got, want)
+	}
+}
+
 func TestRunCanAppendLiteralQuietFlagAfterOptionSeparator(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notes.json")
 	t.Setenv("LAZYNOTE_PATH", path)
@@ -345,6 +363,157 @@ func TestRunSearchesNotes(t *testing.T) {
 	}
 	if strings.Contains(got, other.ID) || strings.Contains(got, "grocery list") {
 		t.Fatalf("stdout = %q, want non-matching note omitted", got)
+	}
+}
+
+func TestRunSearchesTags(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	store := notes.NewStore(path)
+	matching, err := store.AppendWithTags("release plan", "ship packages", []string{"work"})
+	if err != nil {
+		t.Fatalf("append matching note: %v", err)
+	}
+	if _, err := store.Append("grocery list", "eggs"); err != nil {
+		t.Fatalf("append other note: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"search", "#work"}, nil, &stdout); err != nil {
+		t.Fatalf("run search: %v", err)
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, matching.ID) || !strings.Contains(got, "#work") {
+		t.Fatalf("stdout = %q, want tagged matching note", got)
+	}
+}
+
+func TestRunEditsNoteFromArguments(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	store := notes.NewStore(path)
+	note, err := store.Append("old", "old body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"edit", note.ID[:6], "new", "new body"}, nil, &stdout); err != nil {
+		t.Fatalf("run edit: %v", err)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if loaded[0].Title != "new" || loaded[0].Body != "new body" {
+		t.Fatalf("loaded note = %#v, want edited note", loaded[0])
+	}
+	if loaded[0].UpdatedAt == nil {
+		t.Fatal("updated_at is nil, want timestamp after CLI edit")
+	}
+	if !strings.Contains(stdout.String(), note.ID) || !strings.Contains(stdout.String(), "new") {
+		t.Fatalf("stdout = %q, want edited summary", stdout.String())
+	}
+}
+
+func TestRunDeletesNote(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	store := notes.NewStore(path)
+	note, err := store.Append("delete me", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"delete", note.ID[:6]}, nil, &stdout); err != nil {
+		t.Fatalf("run delete: %v", err)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if len(loaded) != 0 {
+		t.Fatalf("loaded %d notes, want empty store", len(loaded))
+	}
+	if !strings.Contains(stdout.String(), "Deleted") {
+		t.Fatalf("stdout = %q, want deletion message", stdout.String())
+	}
+}
+
+func TestRunPinsAndUnpinsNote(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	store := notes.NewStore(path)
+	note, err := store.Append("pin me", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"pin", note.ID[:6]}, nil, &stdout); err != nil {
+		t.Fatalf("run pin: %v", err)
+	}
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if !loaded[0].Pinned {
+		t.Fatal("note is not pinned")
+	}
+
+	stdout.Reset()
+	if err := run([]string{"unpin", note.ID[:6]}, nil, &stdout); err != nil {
+		t.Fatalf("run unpin: %v", err)
+	}
+	loaded, err = store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if loaded[0].Pinned {
+		t.Fatal("note is still pinned")
+	}
+}
+
+func TestRunTagsAndUntagsNote(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	store := notes.NewStore(path)
+	note, err := store.Append("tag me", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"tag", note.ID[:6], "work", "#idea"}, nil, &stdout); err != nil {
+		t.Fatalf("run tag: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "#work #idea") {
+		t.Fatalf("stdout = %q, want formatted tags", stdout.String())
+	}
+
+	stdout.Reset()
+	if err := run([]string{"tags", note.ID[:6]}, nil, &stdout); err != nil {
+		t.Fatalf("run tags: %v", err)
+	}
+	if got, want := strings.TrimSpace(stdout.String()), "#work #idea"; got != want {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+	}
+
+	stdout.Reset()
+	if err := run([]string{"untag", note.ID[:6], "work"}, nil, &stdout); err != nil {
+		t.Fatalf("run untag: %v", err)
+	}
+	if strings.Contains(stdout.String(), "#work") || !strings.Contains(stdout.String(), "#idea") {
+		t.Fatalf("stdout = %q, want only #idea", stdout.String())
 	}
 }
 
