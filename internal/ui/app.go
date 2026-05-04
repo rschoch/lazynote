@@ -37,6 +37,8 @@ var (
 type App struct {
 	store           *notes.Store
 	theme           Theme
+	settings        Settings
+	allNotes        []notes.Note
 	notes           []notes.Note
 	selected        int
 	detailOffset    int
@@ -45,6 +47,12 @@ type App struct {
 	status          string
 	statusMode      statusMode
 	copyText        func(string) error
+	filterQuery     string
+	searchInput     string
+	searchOriginal  string
+	inputMode       inputMode
+	editor          string
+	editNote        func(notes.Note) (string, string, bool, error)
 }
 
 type statusMode int
@@ -53,6 +61,13 @@ const (
 	statusDefault statusMode = iota
 	statusDeleteArmed
 	statusMessage
+)
+
+type inputMode int
+
+const (
+	inputNormal inputMode = iota
+	inputSearch
 )
 
 // Option configures an App.
@@ -65,12 +80,27 @@ func WithTheme(theme Theme) Option {
 	}
 }
 
+// WithSettings sets terminal UI behavior.
+func WithSettings(settings Settings) Option {
+	return func(a *App) {
+		a.settings = settings.normalized()
+	}
+}
+
+// WithEditor sets the editor command used by the TUI edit action.
+func WithEditor(editor string) Option {
+	return func(a *App) {
+		a.editor = editor
+	}
+}
+
 // New creates a terminal UI app backed by store.
 func New(store *notes.Store, opts ...Option) *App {
-	app := &App{store: store, theme: DefaultTheme()}
+	app := &App{store: store, theme: DefaultTheme(), settings: DefaultSettings()}
 	for _, opt := range opts {
 		opt(app)
 	}
+	app.settings = app.settings.normalized()
 	return app
 }
 
@@ -81,6 +111,8 @@ func (a *App) Run() error {
 		return err
 	}
 	defer g.Close()
+	stopRefresh := a.startAutoRefresh(g, a.settings.RefreshInterval)
+	defer stopRefresh()
 
 	if err := g.MainLoop(); err != nil && !errors.Is(err, gocui.ErrQuit) {
 		return err
@@ -94,7 +126,8 @@ func (a *App) newGUI(mode gocui.OutputMode) (*gocui.Gui, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.notes = loaded
+	a.allNotes = a.orderedNotes(loaded)
+	a.applyFilter("")
 	a.clampSelection()
 
 	g, err := gocui.NewGui(mode, true)
@@ -132,11 +165,17 @@ func (a *App) keybindings(g *gocui.Gui) error {
 		{"", gocui.KeyArrowUp, a.up},
 		{"", 'c', a.copy},
 		{"", 'd', a.delete},
+		{"", 'e', a.edit},
+		{"", 'r', a.manualRefresh},
+		{"", '/', a.startSearch},
+		{"", gocui.KeyEsc, a.clearFilterKey},
 		{"", gocui.KeyDelete, a.delete},
 		{"", gocui.KeyPgdn, a.detailDown},
 		{"", gocui.KeyPgup, a.detailUp},
 		{"", gocui.KeyArrowLeft, a.focusNotes},
 		{"", gocui.KeyArrowRight, a.focusDetail},
+		{statusView, gocui.KeyEnter, a.confirmSearch},
+		{statusView, gocui.KeyEsc, a.cancelSearch},
 	}
 
 	for _, binding := range bindings {
@@ -196,8 +235,13 @@ func (a *App) layoutNotes(g *gocui.Gui, x0, y0, x1, y1 int) error {
 		return err
 	}
 
-	v.Title = fmt.Sprintf(" Notes %d ", len(a.notes))
-	v.Subtitle = ""
+	if a.filterQuery != "" {
+		v.Title = fmt.Sprintf(" Notes %d/%d ", len(a.notes), len(a.sourceNotes()))
+		v.Subtitle = " /" + fitLine(a.filterQuery, 18) + " "
+	} else {
+		v.Title = fmt.Sprintf(" Notes %d ", len(a.notes))
+		v.Subtitle = ""
+	}
 	v.TitleColor = a.paneTitleColor(paneNotes)
 	v.FrameColor = a.paneFrameColor(paneNotes)
 	v.FrameRunes = roundedFrameRunes
@@ -210,7 +254,11 @@ func (a *App) layoutNotes(g *gocui.Gui, x0, y0, x1, y1 int) error {
 
 	if len(a.notes) == 0 {
 		v.FgColor = theme.MutedFg
-		fmt.Fprintln(v, "No notes yet")
+		if a.filterQuery != "" {
+			fmt.Fprintln(v, "No matches")
+		} else {
+			fmt.Fprintln(v, "No notes yet")
+		}
 		_ = v.SetOrigin(0, 0)
 		_ = v.SetCursor(0, 0)
 		return nil
@@ -250,7 +298,11 @@ func (a *App) layoutDetail(g *gocui.Gui, x0, y0, x1, y1 int) error {
 		v.Subtitle = ""
 		a.detailOffset = 0
 		v.FgColor = theme.MutedFg
-		fmt.Fprintln(v, "Nothing saved yet.")
+		if a.filterQuery != "" {
+			fmt.Fprintln(v, "No matching note.")
+		} else {
+			fmt.Fprintln(v, "Nothing saved yet.")
+		}
 		return nil
 	}
 
@@ -274,9 +326,22 @@ func (a *App) layoutStatus(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	v.Frame = false
 	v.BgColor = theme.DefaultBg
 	v.FgColor = theme.StatusFg
+	v.Editable = a.inputMode == inputSearch
+	if v.Editable {
+		v.Editor = searchEditor{app: a}
+	}
 	v.Clear()
 
 	width, _ := v.Size()
+	if a.inputMode == inputSearch {
+		g.Cursor = true
+		line := "/" + a.searchInput
+		fmt.Fprint(v, fitLine(line, width))
+		_ = v.SetCursor(runeLen(line), 0)
+		return nil
+	}
+
+	g.Cursor = false
 	fmt.Fprint(v, fitLine(a.statusLine(), width))
 
 	return nil
@@ -294,6 +359,9 @@ func (a *App) statusText() string {
 	status := statusIcon + " 0/0"
 	if _, ok := a.selectedNote(); ok {
 		status = fmt.Sprintf("%s %d/%d", statusIcon, a.selected+1, len(a.notes))
+		if a.filterQuery != "" {
+			status = fmt.Sprintf("%s of %d  filter %q", status, len(a.sourceNotes()), a.filterQuery)
+		}
 		if a.activePane == paneDetail && a.detailOffset > 0 {
 			status = fmt.Sprintf("%s  scroll +%d", status, a.detailOffset)
 		}
@@ -308,13 +376,19 @@ func (a *App) statusHints() string {
 	}
 
 	if _, ok := a.selectedNote(); !ok {
-		return "q quit"
+		if a.filterQuery != "" {
+			return "/ search   esc clear   r refresh   q quit"
+		}
+		return "/ search   r refresh   q quit"
 	}
 
 	if a.activePane == paneDetail {
-		return "↑/↓ scroll   pg page   ← list   c copy body   q quit"
+		return "↑/↓ scroll   pg page   ← list   c copy body   e edit   r refresh   q quit"
 	}
-	return "↑/↓ select   → body   c copy title   d delete   q quit"
+	if a.filterQuery != "" {
+		return "↑/↓ select   → body   c copy title   e edit   d delete   / search   esc clear   r refresh   q quit"
+	}
+	return "↑/↓ select   → body   c copy title   e edit   d delete   / search   r refresh   q quit"
 }
 
 func (a *App) syncListCursor(v *gocui.View) {
@@ -443,9 +517,7 @@ func (a *App) delete(g *gocui.Gui, v *gocui.View) error {
 		return nil
 	}
 
-	a.notes = updated
-	a.clampSelection()
-	a.detailOffset = 0
+	a.applyLoadedNotes(updated, "")
 	a.pendingDeleteID = ""
 	a.status = fmt.Sprintf("Deleted %q", note.Title)
 	a.statusMode = statusMessage
@@ -552,6 +624,11 @@ func writeOSC52Clipboard(text string) error {
 func (a *App) setCurrentView(g *gocui.Gui) error {
 	if g == nil {
 		return nil
+	}
+
+	if a.inputMode == inputSearch {
+		_, err := g.SetCurrentView(statusView)
+		return err
 	}
 
 	_, err := g.SetCurrentView(a.activePane.viewName())

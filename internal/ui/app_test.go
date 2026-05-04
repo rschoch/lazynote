@@ -296,6 +296,231 @@ func TestCopyHandlesEmptyNotes(t *testing.T) {
 	}
 }
 
+func TestReloadNotesFromDiskPicksUpExternalAppend(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	first, err := store.Append("first", "first body")
+	if err != nil {
+		t.Fatalf("append first note: %v", err)
+	}
+	if _, err := store.Append("second", "second body"); err != nil {
+		t.Fatalf("append second note: %v", err)
+	}
+
+	app := loadedApp(t, store)
+	app.selected = 0
+	if _, err := store.Append("third", "third body"); err != nil {
+		t.Fatalf("append external note: %v", err)
+	}
+
+	if err := app.reloadNotesFromDisk("Notes updated"); err != nil {
+		t.Fatalf("reload notes: %v", err)
+	}
+
+	if len(app.notes) != 3 {
+		t.Fatalf("loaded %d notes, want 3", len(app.notes))
+	}
+	if app.notes[app.selected].ID != first.ID {
+		t.Fatalf("selected note = %q, want original selected note %q", app.notes[app.selected].ID, first.ID)
+	}
+	if app.status != "1 new note" {
+		t.Fatalf("status = %q, want new note count", app.status)
+	}
+}
+
+func TestReloadNotesFromDiskLeavesStatusWhenUnchanged(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	if _, err := store.Append("first", "first body"); err != nil {
+		t.Fatalf("append first note: %v", err)
+	}
+
+	app := loadedApp(t, store)
+	app.status = "Copied title"
+	app.statusMode = statusMessage
+
+	if err := app.reloadNotesFromDisk("Notes updated"); err != nil {
+		t.Fatalf("reload notes: %v", err)
+	}
+
+	if app.status != "Copied title" {
+		t.Fatalf("status = %q, want unchanged status", app.status)
+	}
+}
+
+func TestReloadNotesFromDiskClampsDeletedSelection(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	first, err := store.Append("first", "first body")
+	if err != nil {
+		t.Fatalf("append first note: %v", err)
+	}
+	second, err := store.Append("second", "second body")
+	if err != nil {
+		t.Fatalf("append second note: %v", err)
+	}
+
+	app := loadedApp(t, store)
+	app.selected = 0
+	app.detailOffset = 4
+	app.pendingDeleteID = first.ID
+	app.statusMode = statusDeleteArmed
+	if _, err := store.Delete(first.ID); err != nil {
+		t.Fatalf("delete external note: %v", err)
+	}
+
+	if err := app.reloadNotesFromDisk("Notes updated"); err != nil {
+		t.Fatalf("reload notes: %v", err)
+	}
+
+	if len(app.notes) != 1 {
+		t.Fatalf("loaded %d notes, want 1", len(app.notes))
+	}
+	if app.notes[app.selected].ID != second.ID {
+		t.Fatalf("selected note = %q, want remaining note %q", app.notes[app.selected].ID, second.ID)
+	}
+	if app.detailOffset != 0 {
+		t.Fatalf("detailOffset = %d, want reset after selected note was removed", app.detailOffset)
+	}
+	if app.pendingDeleteID != "" {
+		t.Fatalf("pendingDeleteID = %q, want cleared", app.pendingDeleteID)
+	}
+}
+
+func TestFilterMatchesTitleAndBody(t *testing.T) {
+	app := &App{
+		allNotes: []notes.Note{
+			{ID: "one", Title: "release plan", Body: "ship packages"},
+			{ID: "two", Title: "grocery list", Body: "buy eggs"},
+		},
+	}
+
+	app.setFilterQuery("PACKAGES")
+
+	if len(app.notes) != 1 {
+		t.Fatalf("filtered %d notes, want 1", len(app.notes))
+	}
+	if app.notes[0].ID != "one" {
+		t.Fatalf("filtered note = %q, want one", app.notes[0].ID)
+	}
+}
+
+func TestClearFilterRestoresNotes(t *testing.T) {
+	app := &App{
+		allNotes: []notes.Note{
+			{ID: "one", Title: "release plan"},
+			{ID: "two", Title: "grocery list"},
+		},
+	}
+	app.setFilterQuery("release")
+
+	app.clearFilter()
+
+	if len(app.notes) != 2 {
+		t.Fatalf("notes = %d, want restored list", len(app.notes))
+	}
+	if app.filterQuery != "" {
+		t.Fatalf("filterQuery = %q, want cleared", app.filterQuery)
+	}
+}
+
+func TestApplyLoadedNotesReportsNewNotesWithoutMovingSelection(t *testing.T) {
+	createdAt := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+	app := &App{
+		allNotes: []notes.Note{
+			{ID: "one", Title: "one", CreatedAt: createdAt},
+		},
+		notes: []notes.Note{
+			{ID: "one", Title: "one", CreatedAt: createdAt},
+		},
+		settings: DefaultSettings(),
+	}
+
+	app.applyLoadedNotes([]notes.Note{
+		{ID: "one", Title: "one", CreatedAt: createdAt},
+		{ID: "two", Title: "two", CreatedAt: createdAt.Add(time.Minute)},
+	}, "Notes updated")
+
+	if app.status != "1 new note" {
+		t.Fatalf("status = %q, want new note count", app.status)
+	}
+	if app.notes[app.selected].ID != "one" {
+		t.Fatalf("selected = %q, want existing selection preserved", app.notes[app.selected].ID)
+	}
+}
+
+func TestApplyLoadedNotesCanAutoSelectNewNotes(t *testing.T) {
+	createdAt := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+	app := &App{
+		allNotes: []notes.Note{
+			{ID: "one", Title: "one", CreatedAt: createdAt},
+		},
+		notes: []notes.Note{
+			{ID: "one", Title: "one", CreatedAt: createdAt},
+		},
+		settings: Settings{RefreshInterval: time.Second, NoteOrder: OrderOldestFirst, AutoSelectNewNotes: true},
+	}
+
+	app.applyLoadedNotes([]notes.Note{
+		{ID: "one", Title: "one", CreatedAt: createdAt},
+		{ID: "two", Title: "two", CreatedAt: createdAt.Add(time.Minute)},
+	}, "Notes updated")
+
+	if app.notes[app.selected].ID != "two" {
+		t.Fatalf("selected = %q, want newest incoming note", app.notes[app.selected].ID)
+	}
+}
+
+func TestNoteOrderCanShowNewestFirst(t *testing.T) {
+	createdAt := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+	app := &App{
+		settings: Settings{RefreshInterval: time.Second, NoteOrder: OrderNewestFirst},
+	}
+
+	app.applyLoadedNotes([]notes.Note{
+		{ID: "one", Title: "one", CreatedAt: createdAt},
+		{ID: "two", Title: "two", CreatedAt: createdAt.Add(time.Minute)},
+	}, "")
+
+	if app.notes[0].ID != "two" {
+		t.Fatalf("first note = %q, want newest note first", app.notes[0].ID)
+	}
+}
+
+func TestEditUpdatesSelectedNote(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.Append("old", "old body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+	app := loadedApp(t, store)
+	app.editNote = func(notes.Note) (string, string, bool, error) {
+		return "new", "new body", true, nil
+	}
+
+	if err := app.edit(nil, nil); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if loaded[0].ID != note.ID || loaded[0].Title != "new" || loaded[0].Body != "new body" {
+		t.Fatalf("updated note = %#v, want edited note", loaded[0])
+	}
+	if app.status != "Saved note" {
+		t.Fatalf("status = %q, want Saved note", app.status)
+	}
+}
+
+func TestParseEditableNoteUsesFirstLineAsTitle(t *testing.T) {
+	title, body, err := parseEditableNote("new title\n\nbody line one\nbody line two\n")
+	if err != nil {
+		t.Fatalf("parse editable note: %v", err)
+	}
+	if title != "new title" || body != "body line one\nbody line two" {
+		t.Fatalf("parsed title/body = %q/%q", title, body)
+	}
+}
+
 func TestPaneColorsFollowActivePane(t *testing.T) {
 	theme := DefaultTheme()
 	app := &App{}
