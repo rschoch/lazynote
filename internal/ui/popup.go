@@ -61,6 +61,7 @@ func (a *App) toggleHelp(g *gocui.Gui, v *gocui.View) error {
 			"Pg        page through the body",
 			"/         filter title, body, or #tag",
 			"Esc       clear filter or close popup",
+			"n         create note",
 			"c         copy selected title/body",
 			"e         edit selected note",
 			"p         pin or unpin selected note",

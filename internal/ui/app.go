@@ -56,6 +56,7 @@ type App struct {
 	inputMode       inputMode
 	editor          string
 	editNote        func(notes.Note) (string, string, bool, error)
+	createNote      func() (string, string, bool, error)
 }
 
 type statusMode int
@@ -170,6 +171,7 @@ func (a *App) keybindings(g *gocui.Gui) error {
 		{"", 'c', a.copy},
 		{"", 'd', a.delete},
 		{"", 'e', a.edit},
+		{"", 'n', a.create},
 		{"", 'p', a.togglePin},
 		{"", 'r', a.manualRefresh},
 		{"", '/', a.startSearch},
@@ -408,40 +410,40 @@ func (a *App) statusHints() string {
 
 	if _, ok := a.selectedNote(); !ok {
 		if a.filterQuery != "" {
-			return "/ filter   Esc clear   r reload   ? help   q quit"
+			return "n new   / filter   Esc clear   r reload   ? help   q quit"
 		}
-		return "/ filter   r reload   ? help   q quit"
+		return "n new   / filter   r reload   ? help   q quit"
 	}
 
 	if a.activePane == paneDetail {
-		return "↑↓ scroll   Pg page   ← list   c copy   e edit   p pin   r reload   ? help   q quit"
+		return "↑↓ scroll   Pg page   ← list   n new   c copy   e edit   p pin   r reload   ? help   q quit"
 	}
 	if a.filterQuery != "" {
-		return "↑↓ nav   → body   / filter   Esc clear   c copy   p pin   e edit   d del   r reload   ? help   q quit"
+		return "↑↓ nav   → body   n new   / filter   Esc clear   c copy   p pin   e edit   d del   r reload   ? help   q quit"
 	}
-	return "↑↓ nav   → body   / filter   c copy   p pin   e edit   d del   r reload   ? help   q quit"
+	return "↑↓ nav   → body   n new   / filter   c copy   p pin   e edit   d del   r reload   ? help   q quit"
 }
 
 func (a *App) compactStatusHints() string {
 	switch a.statusMode {
 	case statusDeleteArmed:
-		return "d ok   ↑↓ cancel   q"
+		return "d ok ↑↓ cancel q"
 	}
 
 	if _, ok := a.selectedNote(); !ok {
 		if a.filterQuery != "" {
-			return "/   Esc   r   ?   q"
+			return "n / Esc r ? q"
 		}
-		return "/   r   ?   q"
+		return "n / r ? q"
 	}
 
 	if a.activePane == paneDetail {
-		return "↑↓   Pg   ←   c   e   p   r   ?   q"
+		return "↑↓ Pg ← n c e p r ? q"
 	}
 	if a.filterQuery != "" {
-		return "↑↓   →   /   Esc   c   p   e   d   r   ?   q"
+		return "↑↓ → n / Esc c p e d r ? q"
 	}
-	return "↑↓   →   /   c   p   e   d   r   ?   q"
+	return "↑↓ → n / c p e d r ? q"
 }
 
 func (a *App) syncListCursor(v *gocui.View) {

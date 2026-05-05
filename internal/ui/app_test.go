@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -206,7 +207,7 @@ func TestStatusLineIncludesPositionAndKeys(t *testing.T) {
 	if strings.Contains(got, "2026") {
 		t.Fatalf("statusLine() = %q, want no selected-note timestamp", got)
 	}
-	for _, want := range []string{"2/2", "↑↓ nav", "→ body", "p pin", "? help", "d del", "q quit"} {
+	for _, want := range []string{"2/2", "↑↓ nav", "→ body", "n new", "p pin", "? help", "d del", "q quit"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
@@ -776,6 +777,98 @@ func TestEditUpdatesSelectedNote(t *testing.T) {
 	}
 }
 
+func TestCreateAppendsAndSelectsNewNote(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	if _, err := store.Append("old", "old body"); err != nil {
+		t.Fatalf("append old note: %v", err)
+	}
+	app := loadedApp(t, store)
+	app.settings.NoteOrder = OrderNewestFirst
+	app.detailOffset = 7
+	app.createNote = func() (string, string, bool, error) {
+		return "new", "new body", true, nil
+	}
+
+	if err := app.create(nil, nil); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if len(loaded) != 2 {
+		t.Fatalf("loaded %d notes, want 2", len(loaded))
+	}
+	created := loaded[1]
+	if created.Title != "new" || created.Body != "new body" {
+		t.Fatalf("created note = %#v, want new title/body", created)
+	}
+	selected, ok := app.selectedNote()
+	if !ok {
+		t.Fatal("selected note missing")
+	}
+	if selected.ID != created.ID {
+		t.Fatalf("selected note = %q, want created note %q", selected.ID, created.ID)
+	}
+	if app.status != "Created note" {
+		t.Fatalf("status = %q, want Created note", app.status)
+	}
+	if app.detailOffset != 0 {
+		t.Fatalf("detailOffset = %d, want reset for created note", app.detailOffset)
+	}
+}
+
+func TestCreateCanceledDoesNotAppend(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	app := loadedApp(t, store)
+	app.createNote = func() (string, string, bool, error) {
+		return "", "", false, nil
+	}
+
+	if err := app.create(nil, nil); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if len(loaded) != 0 {
+		t.Fatalf("loaded %d notes, want none", len(loaded))
+	}
+	if app.status != "Create canceled" {
+		t.Fatalf("status = %q, want Create canceled", app.status)
+	}
+}
+
+func TestCreateClearsFilterWhenNewNoteWouldBeHidden(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	if _, err := store.Append("old", "old body"); err != nil {
+		t.Fatalf("append old note: %v", err)
+	}
+	app := loadedApp(t, store)
+	app.setFilterQuery("old")
+	app.createNote = func() (string, string, bool, error) {
+		return "new", "new body", true, nil
+	}
+
+	if err := app.create(nil, nil); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if app.filterQuery != "" {
+		t.Fatalf("filterQuery = %q, want cleared filter", app.filterQuery)
+	}
+	selected, ok := app.selectedNote()
+	if !ok {
+		t.Fatal("selected note missing")
+	}
+	if selected.Title != "new" {
+		t.Fatalf("selected title = %q, want new", selected.Title)
+	}
+}
+
 func TestParseEditableNoteUsesFirstLineAsTitle(t *testing.T) {
 	title, body, err := parseEditableNote("new title\n\nbody line one\nbody line two\n")
 	if err != nil {
@@ -783,6 +876,38 @@ func TestParseEditableNoteUsesFirstLineAsTitle(t *testing.T) {
 	}
 	if title != "new title" || body != "body line one\nbody line two" {
 		t.Fatalf("parsed title/body = %q/%q", title, body)
+	}
+}
+
+func TestCreateNoteInExternalEditorUsesFirstLineAsTitle(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell editor command is unix-specific")
+	}
+
+	editor := `sh -c "printf 'new title\n\nnew body\n' > \"\$1\"" sh`
+	title, body, created, err := CreateNoteInExternalEditor(editor)
+	if err != nil {
+		t.Fatalf("create note in editor: %v", err)
+	}
+	if !created {
+		t.Fatal("created = false, want true")
+	}
+	if title != "new title" || body != "new body" {
+		t.Fatalf("created title/body = %q/%q, want parsed editor content", title, body)
+	}
+}
+
+func TestCreateNoteInExternalEditorTreatsEmptyFileAsCanceled(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell editor command is unix-specific")
+	}
+
+	_, _, created, err := CreateNoteInExternalEditor("true")
+	if err != nil {
+		t.Fatalf("create note in editor: %v", err)
+	}
+	if created {
+		t.Fatal("created = true, want canceled")
 	}
 }
 

@@ -288,6 +288,7 @@ Keys:
 - PageUp: scroll note body up
 - `/`: filter notes by title, body, or `#tag`; Enter applies, Esc cancels
 - `r`: reload notes from disk now
+- `n`: create a note in `$VISUAL`, `$EDITOR`, or `vi`
 - `e`: edit the selected note in `$VISUAL`, `$EDITOR`, or `vi`
 - `p`: pin or unpin the selected note
 - `?`: show or hide the help overlay
@@ -296,12 +297,23 @@ Keys:
 - Esc: clear the active filter
 - `q` / Ctrl-C: quit
 
-Copy uses terminal clipboard support. Editing opens a temporary file whose first
-line is the note title and whose remaining content is the note body. The note
-body pane shows tags and edited timestamps when present. Pinned notes stay at
-the top of the list and use `▴` in the list gutter. Notes that arrive from
-another process while the TUI is open use `●` until selected. Fonts, glyph
-rendering, and colors depend on your terminal emulator.
+Copy uses terminal clipboard support. Creating and editing open a temporary
+file whose first line is the note title and whose remaining content is the note
+body. The note body pane shows tags and edited timestamps when present. Pinned
+notes stay at the top of the list and use `▴` in the list gutter. Notes that
+arrive from another process while the TUI is open use `●` until selected.
+Fonts, glyph rendering, and colors depend on your terminal emulator.
+
+Set your preferred external editor before launching `lazynote`:
+
+```sh
+export VISUAL="nvim"
+export EDITOR="nano"
+```
+
+`VISUAL` is preferred over `EDITOR`; if neither is set, `lazynote` falls back to
+`vi`. GUI editors should wait for the file to close, for example
+`VISUAL="code --wait"`.
 
 ### TUI Behavior
 
