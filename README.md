@@ -17,7 +17,7 @@ toolchain.
 
 - [Why lazynote?](#why-lazynote)
 - [Quick Example](#quick-example)
-- [Install](#install)
+- [Install and Update](#install-and-update)
 - [CLI Workflows](#cli-workflows)
 - [Agent Plugins](#agent-plugins)
   - [Codex Install](#codex-install)
@@ -61,16 +61,24 @@ lazynote export json
 
 ![lazynote TUI screenshot](assets/screenshot.png)
 
-## Install
+## Install and Update
 
-Recommended for Linux and macOS:
+Recommended for installing or updating to the latest release on Linux and
+macOS:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/rschoch/lazynote/main/install.sh | sh
 ```
 
-The installer downloads the latest release, verifies checksums when possible,
-and installs `lazynote` to `~/.local/bin`.
+The same command handles both installation and updates. It downloads the latest
+release, verifies checksums when possible, and installs or replaces `lazynote`
+in `~/.local/bin`.
+
+Confirm the installed version afterward:
+
+```sh
+lazynote --version
+```
 
 If your shell cannot find it:
 
