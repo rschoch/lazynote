@@ -5,6 +5,7 @@ PREFIX ?= /usr/local
 
 GO ?= go
 GORELEASER ?= goreleaser
+GOLANGCI_LINT ?= golangci-lint
 VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -12,7 +13,7 @@ BUILT_BY ?= make
 
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE) -X main.builtBy=$(BUILT_BY)
 
-.PHONY: build test install uninstall clean release-snapshot
+.PHONY: build test lint install uninstall clean release-snapshot
 
 build:
 	mkdir -p $(BIN_DIR)
@@ -20,6 +21,9 @@ build:
 
 test:
 	$(GO) test ./...
+
+lint:
+	$(GOLANGCI_LINT) run
 
 install: build
 	install -d $(DESTDIR)$(PREFIX)/bin

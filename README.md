@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/rschoch/lazynote/actions/workflows/ci.yml/badge.svg)](https://github.com/rschoch/lazynote/actions/workflows/ci.yml)
 [![GitHub Releases](https://img.shields.io/github/downloads/rschoch/lazynote/total)](https://github.com/rschoch/lazynote/releases)
-[![Go Report Card](https://goreportcard.com/badge/github.com/rschoch/lazynote)](https://goreportcard.com/report/github.com/rschoch/lazynote)
 [![GitHub tag](https://img.shields.io/github/v/tag/rschoch/lazynote?color=blue)](https://github.com/rschoch/lazynote/releases/latest)
 
 `lazynote` is a local, terminal-first notes app for developer workflows.
