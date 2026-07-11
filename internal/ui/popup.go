@@ -120,7 +120,7 @@ func (a *App) layoutPopup(g *gocui.Gui, maxX, maxY int) error {
 		if i >= visibleLines {
 			break
 		}
-		fmt.Fprintln(v, fitLine(line, width-2))
+		_, _ = fmt.Fprintln(v, fitLine(line, width-2))
 	}
 	return nil
 }

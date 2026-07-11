@@ -442,12 +442,12 @@ func (s *Store) saveUnlocked(notes []Note) error {
 		return fmt.Errorf("create temporary notes file: %w", err)
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }()
 
 	enc := json.NewEncoder(tmp)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(notes); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("encode notes: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -526,7 +526,7 @@ func (s *Store) withLock(fn func() error) error {
 				_ = os.Remove(lockPath)
 				return fmt.Errorf("close notes lock: %w", closeErr)
 			}
-			defer os.Remove(lockPath)
+			defer func() { _ = os.Remove(lockPath) }()
 			return fn()
 		}
 		if !errors.Is(err, os.ErrExist) {
@@ -569,10 +569,10 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("create temporary file: %w", err)
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }()
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("write temporary file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {

@@ -34,7 +34,7 @@ var (
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -76,7 +76,7 @@ func runMetaCommand(args []string, stdout io.Writer) (bool, error) {
 		printUsage(stdout)
 		return true, nil
 	case "--version", "-v", "version":
-		fmt.Fprintln(stdout, versionString())
+		_, _ = fmt.Fprintln(stdout, versionString())
 		return true, nil
 	default:
 		return false, nil
@@ -137,7 +137,7 @@ func runAppendOrTUI(store *notes.Store, args []string, stdin io.Reader, stdout i
 	}
 
 	if !opts.quiet {
-		fmt.Fprintln(stdout, noteSuccessMessage)
+		_, _ = fmt.Fprintln(stdout, noteSuccessMessage)
 	}
 	return nil
 }
@@ -171,7 +171,7 @@ func parseGlobalOptions(args []string) ([]string, runOptions, error) {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
+	_, _ = fmt.Fprint(w, `Usage:
   lazynote [--quiet] [--tag <tag>...] <title> <note>
   lazynote [--quiet] [--tag <tag>...] <title> -
   lazynote -- <title> <note>
@@ -246,7 +246,7 @@ func runList(store *notes.Store, args []string, stdout io.Writer) error {
 		return err
 	}
 	for _, note := range loaded {
-		fmt.Fprintln(stdout, noteSummary(note))
+		_, _ = fmt.Fprintln(stdout, noteSummary(note))
 	}
 	return nil
 }
@@ -267,23 +267,23 @@ func runShow(store *notes.Store, args []string, stdout io.Writer) error {
 	}
 
 	if bodyOnly {
-		fmt.Fprintln(stdout, note.Body)
+		_, _ = fmt.Fprintln(stdout, note.Body)
 		return nil
 	}
 
-	fmt.Fprintf(stdout, "id: %s\n", note.ID)
-	fmt.Fprintf(stdout, "created_at: %s\n", note.CreatedAt.UTC().Format(time.RFC3339))
+	_, _ = fmt.Fprintf(stdout, "id: %s\n", note.ID)
+	_, _ = fmt.Fprintf(stdout, "created_at: %s\n", note.CreatedAt.UTC().Format(time.RFC3339))
 	if note.UpdatedAt != nil {
-		fmt.Fprintf(stdout, "updated_at: %s\n", note.UpdatedAt.UTC().Format(time.RFC3339))
+		_, _ = fmt.Fprintf(stdout, "updated_at: %s\n", note.UpdatedAt.UTC().Format(time.RFC3339))
 	}
 	if note.Pinned {
-		fmt.Fprintln(stdout, "pinned: true")
+		_, _ = fmt.Fprintln(stdout, "pinned: true")
 	}
 	if tags := notes.FormatTags(note.Tags); tags != "" {
-		fmt.Fprintf(stdout, "tags: %s\n", tags)
+		_, _ = fmt.Fprintf(stdout, "tags: %s\n", tags)
 	}
-	fmt.Fprintf(stdout, "title: %s\n\n", note.Title)
-	fmt.Fprintln(stdout, note.Body)
+	_, _ = fmt.Fprintf(stdout, "title: %s\n\n", note.Title)
+	_, _ = fmt.Fprintln(stdout, note.Body)
 	return nil
 }
 
@@ -321,7 +321,7 @@ func runSearch(store *notes.Store, args []string, stdout io.Writer) error {
 
 	for _, note := range loaded {
 		if notes.MatchesQuery(note, query) {
-			fmt.Fprintln(stdout, noteSummary(note))
+			_, _ = fmt.Fprintln(stdout, noteSummary(note))
 		}
 	}
 	return nil
@@ -349,7 +349,7 @@ func runEdit(store *notes.Store, args []string, stdin io.Reader, stdout io.Write
 			return err
 		}
 		if !changed {
-			fmt.Fprintln(stdout, "Edit unchanged")
+			_, _ = fmt.Fprintln(stdout, "Edit unchanged")
 			return nil
 		}
 	} else {
@@ -364,14 +364,14 @@ func runEdit(store *notes.Store, args []string, stdin io.Reader, stdout io.Write
 		return err
 	}
 	if !changed {
-		fmt.Fprintln(stdout, "Edit unchanged")
+		_, _ = fmt.Fprintln(stdout, "Edit unchanged")
 		return nil
 	}
 	edited, err := findNote(updated, note.ID)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, noteSummary(edited))
+	_, _ = fmt.Fprintln(stdout, noteSummary(edited))
 	return nil
 }
 
@@ -406,7 +406,7 @@ func runDelete(store *notes.Store, args []string, stdout io.Writer) error {
 	if _, _, err := store.Delete(note.ID); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "Deleted %s\t%s\n", note.ID, oneLine(note.Title))
+	_, _ = fmt.Fprintf(stdout, "Deleted %s\t%s\n", note.ID, oneLine(note.Title))
 	return nil
 }
 
@@ -429,9 +429,9 @@ func runPin(store *notes.Store, args []string, stdout io.Writer) error {
 			return err
 		}
 		if pinned {
-			fmt.Fprintln(stdout, "Pinned "+noteSummary(note))
+			_, _ = fmt.Fprintln(stdout, "Pinned "+noteSummary(note))
 		} else {
-			fmt.Fprintln(stdout, "Unpinned "+noteSummary(note))
+			_, _ = fmt.Fprintln(stdout, "Unpinned "+noteSummary(note))
 		}
 		return nil
 	}
@@ -467,23 +467,23 @@ func setPinned(store *notes.Store, args []string, pinned bool, stdout io.Writer)
 		return err
 	}
 	if pinned {
-		fmt.Fprintln(stdout, "Pinned "+noteSummary(note))
+		_, _ = fmt.Fprintln(stdout, "Pinned "+noteSummary(note))
 	} else {
-		fmt.Fprintln(stdout, "Unpinned "+noteSummary(note))
+		_, _ = fmt.Fprintln(stdout, "Unpinned "+noteSummary(note))
 	}
 	return nil
 }
 
 func runTag(store *notes.Store, args []string, stdout io.Writer) error {
 	if len(args) < 2 {
-		return fmt.Errorf("usage: lazynote tag <id> <tag>...")
+		return fmt.Errorf("usage: lazynote tag <id> <tag> [<tag>...]")
 	}
 	return updateTags(store, args[0], args[1:], true, stdout)
 }
 
 func runUntag(store *notes.Store, args []string, stdout io.Writer) error {
 	if len(args) < 2 {
-		return fmt.Errorf("usage: lazynote untag <id> <tag>...")
+		return fmt.Errorf("usage: lazynote untag <id> <tag> [<tag>...]")
 	}
 	return updateTags(store, args[0], args[1:], false, stdout)
 }
@@ -511,7 +511,7 @@ func updateTags(store *notes.Store, id string, tags []string, add bool, stdout i
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, noteSummary(note))
+	_, _ = fmt.Fprintln(stdout, noteSummary(note))
 	return nil
 }
 
@@ -528,7 +528,7 @@ func runTags(store *notes.Store, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, notes.FormatTags(note.Tags))
+	_, _ = fmt.Fprintln(stdout, notes.FormatTags(note.Tags))
 	return nil
 }
 
@@ -537,7 +537,7 @@ func runPath(store *notes.Store, args []string, stdout io.Writer) error {
 		return fmt.Errorf("usage: lazynote path")
 	}
 
-	fmt.Fprintln(stdout, store.Path())
+	_, _ = fmt.Fprintln(stdout, store.Path())
 	return nil
 }
 
@@ -576,7 +576,7 @@ func runBackup(store *notes.Store, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, path)
+	_, _ = fmt.Fprintln(stdout, path)
 	return nil
 }
 

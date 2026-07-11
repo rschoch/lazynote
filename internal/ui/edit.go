@@ -135,11 +135,11 @@ func EditNoteInExternalEditor(note notes.Note, editor string) (title, body strin
 		return "", "", false, fmt.Errorf("create edit file: %w", err)
 	}
 	path := tmp.Name()
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	original := formatEditableNote(note.Title, note.Body)
 	if _, err := tmp.WriteString(original); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return "", "", false, fmt.Errorf("write edit file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -176,7 +176,7 @@ func CreateNoteInExternalEditor(editor string) (title, body string, created bool
 		return "", "", false, fmt.Errorf("create edit file: %w", err)
 	}
 	path := tmp.Name()
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	if err := tmp.Close(); err != nil {
 		return "", "", false, fmt.Errorf("close edit file: %w", err)

@@ -242,7 +242,7 @@ func (a *App) layoutSmall(g *gocui.Gui, maxX, maxY int) error {
 	v.FrameRunes = roundedFrameRunes
 	v.Wrap = true
 	v.Clear()
-	fmt.Fprintln(v, "Terminal too small.")
+	_, _ = fmt.Fprintln(v, "Terminal too small.")
 	return nil
 }
 
@@ -273,9 +273,9 @@ func (a *App) layoutNotes(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	if len(a.notes) == 0 {
 		v.FgColor = theme.MutedFg
 		if a.filterQuery != "" {
-			fmt.Fprintln(v, "No matches")
+			_, _ = fmt.Fprintln(v, "No matches")
 		} else {
-			fmt.Fprintln(v, "No notes yet")
+			_, _ = fmt.Fprintln(v, "No notes yet")
 		}
 		_ = v.SetOrigin(0, 0)
 		_ = v.SetCursor(0, 0)
@@ -288,7 +288,7 @@ func (a *App) layoutNotes(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	}
 
 	for i, note := range a.notes {
-		fmt.Fprintln(v, listLine(note, i == a.selected, a.isUnread(note.ID), width))
+		_, _ = fmt.Fprintln(v, listLine(note, i == a.selected, a.isUnread(note.ID), width))
 	}
 	a.syncListCursor(v)
 
@@ -317,9 +317,9 @@ func (a *App) layoutDetail(g *gocui.Gui, x0, y0, x1, y1 int) error {
 		a.detailOffset = 0
 		v.FgColor = theme.MutedFg
 		if a.filterQuery != "" {
-			fmt.Fprintln(v, "No matching note.")
+			_, _ = fmt.Fprintln(v, "No matching note.")
 		} else {
-			fmt.Fprintln(v, "No notes yet.")
+			_, _ = fmt.Fprintln(v, "No notes yet.")
 		}
 		return nil
 	}
@@ -328,7 +328,7 @@ func (a *App) layoutDetail(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	width, _ := v.Size()
 	v.Subtitle = " " + fitLine(noteSubtitle(note), width-2) + " "
 	if note.Body != "" {
-		fmt.Fprintln(v, note.Body)
+		_, _ = fmt.Fprintln(v, note.Body)
 	}
 	a.clampDetailOffset(v, note)
 	_ = v.SetOrigin(0, a.detailOffset)
@@ -355,13 +355,13 @@ func (a *App) layoutStatus(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	if a.inputMode == inputSearch {
 		g.Cursor = true
 		line := "/" + a.searchInput
-		fmt.Fprint(v, fitLine(line, width))
+		_, _ = fmt.Fprint(v, fitLine(line, width))
 		_ = v.SetCursor(runeLen(line), 0)
 		return nil
 	}
 
 	g.Cursor = false
-	fmt.Fprint(v, fitLine(a.statusLineForWidth(width), width))
+	_, _ = fmt.Fprint(v, fitLine(a.statusLineForWidth(width), width))
 
 	return nil
 }
@@ -734,7 +734,7 @@ func writeOSC52Clipboard(text string) error {
 
 	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
 	if err == nil {
-		defer tty.Close()
+		defer func() { _ = tty.Close() }()
 		_, err = tty.WriteString(sequence)
 		return err
 	}
