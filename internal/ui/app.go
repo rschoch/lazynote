@@ -482,8 +482,12 @@ func (a *App) up(g *gocui.Gui, v *gocui.View) error {
 		return a.scrollDetail(g, -1)
 	}
 
-	if a.selected > 0 {
-		a.selected--
+	if len(a.notes) > 0 {
+		if a.selected <= 0 {
+			a.selected = len(a.notes) - 1
+		} else {
+			a.selected--
+		}
 		a.markSelectedRead()
 		a.detailOffset = 0
 		a.pendingDeleteID = ""
@@ -501,8 +505,12 @@ func (a *App) down(g *gocui.Gui, v *gocui.View) error {
 		return a.scrollDetail(g, 1)
 	}
 
-	if a.selected < len(a.notes)-1 {
-		a.selected++
+	if len(a.notes) > 0 {
+		if a.selected < 0 || a.selected >= len(a.notes)-1 {
+			a.selected = 0
+		} else {
+			a.selected++
+		}
 		a.markSelectedRead()
 		a.detailOffset = 0
 		a.pendingDeleteID = ""

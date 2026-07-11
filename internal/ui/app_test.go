@@ -176,6 +176,45 @@ func TestFocusControlsContextualUpDown(t *testing.T) {
 	}
 }
 
+func TestNoteSelectionWrapsAtListBoundaries(t *testing.T) {
+	app := &App{
+		notes: []notes.Note{
+			{Title: "first"},
+			{Title: "second"},
+			{Title: "third"},
+		},
+		activePane: paneNotes,
+	}
+
+	if err := app.up(nil, nil); err != nil {
+		t.Fatalf("up: %v", err)
+	}
+	if app.selected != 2 {
+		t.Fatalf("selected = %d, want up from first note to wrap to last", app.selected)
+	}
+
+	if err := app.down(nil, nil); err != nil {
+		t.Fatalf("down: %v", err)
+	}
+	if app.selected != 0 {
+		t.Fatalf("selected = %d, want down from last note to wrap to first", app.selected)
+	}
+}
+
+func TestNoteSelectionOnEmptyListDoesNothing(t *testing.T) {
+	app := &App{activePane: paneNotes}
+
+	if err := app.up(nil, nil); err != nil {
+		t.Fatalf("up: %v", err)
+	}
+	if err := app.down(nil, nil); err != nil {
+		t.Fatalf("down: %v", err)
+	}
+	if app.selected != 0 {
+		t.Fatalf("selected = %d, want empty list selection unchanged", app.selected)
+	}
+}
+
 func TestSelectionResetsDetailScroll(t *testing.T) {
 	app := &App{
 		notes: []notes.Note{
