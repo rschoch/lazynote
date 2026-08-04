@@ -15,10 +15,11 @@ The built-in themes are:
 - `high-contrast`: adaptive colors with stronger text attributes
 
 The unconfigured `default` theme is designed for both light and dark terminal
-profiles. It uses the terminal's own foreground and background colors for all
-text, borders, and selections instead of assuming a particular background. It
-also avoids dim text because some terminals render it with very low contrast;
-only the decorative frame around the inactive pane is dimmed.
+profiles. It uses the terminal's own foreground and background colors for note
+text instead of assuming a particular background. A medium navy blue marks the
+active frame, title, and selected note with contrast against both light and dark
+backgrounds. Selected-note text is white, and only the decorative frame around
+the inactive pane is dimmed.
 
 Use a built-in theme for one run:
 
