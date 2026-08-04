@@ -17,7 +17,8 @@ The built-in themes are:
 The unconfigured `default` theme is designed for both light and dark terminal
 profiles. It uses the terminal's own foreground and background colors for all
 text, borders, and selections instead of assuming a particular background. It
-also avoids dim text because some terminals render it with very low contrast.
+also avoids dim text because some terminals render it with very low contrast;
+only the decorative frame around the inactive pane is dimmed.
 
 Use a built-in theme for one run:
 

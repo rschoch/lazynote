@@ -31,9 +31,13 @@ func TestDefaultThemeUsesTerminalColors(t *testing.T) {
 		"foreground":    {got.DefaultFg, gocui.ColorDefault},
 		"muted text":    {got.MutedFg, gocui.ColorDefault},
 		"active border": {got.ActiveBorder, gocui.ColorDefault | gocui.AttrBold},
-		"title":         {got.Title, gocui.ColorDefault | gocui.AttrBold},
-		"status":        {got.StatusFg, gocui.ColorDefault},
-		"selection":     {got.SelectedLineBg, gocui.ColorDefault | gocui.AttrReverse},
+		"inactive border": {
+			got.InactiveBorder,
+			gocui.ColorDefault | gocui.AttrDim,
+		},
+		"title":     {got.Title, gocui.ColorDefault | gocui.AttrBold},
+		"status":    {got.StatusFg, gocui.ColorDefault},
+		"selection": {got.SelectedLineBg, gocui.ColorDefault | gocui.AttrReverse},
 	}
 	for role, attrs := range wants {
 		if attrs.got != attrs.want {

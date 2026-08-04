@@ -79,7 +79,7 @@ func builtInThemes() map[string]Theme {
 			DefaultFg:      gocui.ColorDefault,
 			MutedFg:        gocui.ColorDefault,
 			ActiveBorder:   gocui.ColorDefault | gocui.AttrBold,
-			InactiveBorder: gocui.ColorDefault,
+			InactiveBorder: gocui.ColorDefault | gocui.AttrDim,
 			Title:          gocui.ColorDefault | gocui.AttrBold,
 			Warning:        gocui.ColorDefault | gocui.AttrBold,
 			StatusFg:       gocui.ColorDefault,
