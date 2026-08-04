@@ -20,6 +20,60 @@ func TestResolveThemeDefaultsToDefaultTheme(t *testing.T) {
 	}
 }
 
+func TestDefaultThemeUsesTerminalColors(t *testing.T) {
+	got := DefaultTheme()
+
+	wants := map[string]struct {
+		got  gocui.Attribute
+		want gocui.Attribute
+	}{
+		"background":    {got.DefaultBg, gocui.ColorDefault},
+		"foreground":    {got.DefaultFg, gocui.ColorDefault},
+		"muted text":    {got.MutedFg, gocui.ColorDefault},
+		"active border": {got.ActiveBorder, gocui.ColorDefault | gocui.AttrBold},
+		"title":         {got.Title, gocui.ColorDefault | gocui.AttrBold},
+		"status":        {got.StatusFg, gocui.ColorDefault},
+		"selection":     {got.SelectedLineBg, gocui.ColorDefault | gocui.AttrReverse},
+	}
+	for role, attrs := range wants {
+		if attrs.got != attrs.want {
+			t.Errorf("%s = %v, want %v", role, attrs.got, attrs.want)
+		}
+	}
+}
+
+func TestBuiltInLightAndDarkThemesSetBackgrounds(t *testing.T) {
+	light, err := ResolveTheme("light", ThemeConfig{})
+	if err != nil {
+		t.Fatalf("resolve light theme: %v", err)
+	}
+	dark, err := ResolveTheme("dark", ThemeConfig{})
+	if err != nil {
+		t.Fatalf("resolve dark theme: %v", err)
+	}
+
+	if light.DefaultBg != gocui.GetRGBColor(0xf8fafc) {
+		t.Fatalf("light background = %v, want fixed light background", light.DefaultBg)
+	}
+	if dark.DefaultBg != gocui.Get256Color(234) {
+		t.Fatalf("dark background = %v, want fixed dark background", dark.DefaultBg)
+	}
+}
+
+func TestHighContrastThemeUsesTerminalColors(t *testing.T) {
+	got, err := ResolveTheme("high-contrast", ThemeConfig{})
+	if err != nil {
+		t.Fatalf("resolve high-contrast theme: %v", err)
+	}
+
+	if got.DefaultBg != gocui.ColorDefault || got.DefaultFg != gocui.ColorDefault {
+		t.Fatalf("high-contrast foreground/background = %v/%v, want terminal defaults", got.DefaultFg, got.DefaultBg)
+	}
+	if got.MutedFg != gocui.ColorDefault {
+		t.Fatalf("high-contrast muted text = %v, want undimmed terminal foreground", got.MutedFg)
+	}
+}
+
 func TestResolveThemeAppliesAttributeOverrides(t *testing.T) {
 	got, err := ResolveTheme("mono", ThemeConfig{
 		DefaultBgColor:      []string{"#f8fafc"},

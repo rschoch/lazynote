@@ -8,14 +8,21 @@ muted text, and the selected line.
 
 The built-in themes are:
 
-- `default`
-- `mono`
-- `high-contrast`
+- `default`: adapts to the terminal profile using its foreground and background
+- `dark`: fixed dark background with the original teal and pink palette
+- `light`: fixed light background and dark text
+- `mono`: adaptive monochrome colors
+- `high-contrast`: adaptive colors with stronger text attributes
+
+The unconfigured `default` theme is designed for both light and dark terminal
+profiles. It uses the terminal's own foreground and background colors for all
+text, borders, and selections instead of assuming a particular background. It
+also avoids dim text because some terminals render it with very low contrast.
 
 Use a built-in theme for one run:
 
 ```sh
-LAZYNOTE_THEME=mono lazynote
+LAZYNOTE_THEME=light lazynote
 ```
 
 `LAZYNOTE_THEME` takes precedence over config files.
@@ -120,9 +127,9 @@ terminals that support them.
 `lazynote` can paint its own TUI background, but it does not change your
 terminal profile or window chrome.
 
-## Example Themes
+## Example Theme Config
 
-Try the copyable light example from a checkout:
+Try the copyable built-in light theme config from a checkout:
 
 ```sh
 LAZYNOTE_CONFIG=examples/themes/light.json lazynote

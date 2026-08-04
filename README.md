@@ -344,10 +344,13 @@ Supported values:
 
 ### Themes
 
-The TUI includes `default`, `mono`, and `high-contrast` themes:
+The TUI includes adaptive `default`, `mono`, and `high-contrast` themes, plus
+fixed `dark` and `light` themes. The default inherits your terminal's foreground
+and background colors, so it remains readable with either a light or dark
+terminal profile.
 
 ```sh
-LAZYNOTE_THEME=mono lazynote
+LAZYNOTE_THEME=light lazynote
 ```
 
 Custom theme overrides are configured in `~/.config/lazynote/config.json`.
