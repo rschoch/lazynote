@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/awesome-gocui/gocui"
 	"github.com/rschoch/lazynote/internal/notes"
@@ -38,10 +39,13 @@ type App struct {
 	theme           Theme
 	settings        Settings
 	allNotes        []notes.Note
+	searchIndex     map[string]normalizedNote
 	unreadIDs       map[string]struct{}
 	notes           []notes.Note
 	selected        int
+	listOffset      int
 	detailOffset    int
+	detailMetrics   detailMetrics
 	activePane      pane
 	pendingDeleteID string
 	status          string
@@ -129,6 +133,7 @@ func (a *App) newGUI(mode gocui.OutputMode) (*gocui.Gui, error) {
 		return nil, err
 	}
 	a.allNotes = a.orderedNotes(loaded)
+	a.rebuildSearchIndex()
 	a.applyFilter("")
 	a.clampSelection()
 
@@ -280,15 +285,19 @@ func (a *App) layoutNotes(g *gocui.Gui, x0, y0, x1, y1 int) error {
 		return nil
 	}
 
-	width, _ := v.Size()
+	width, height := v.Size()
 	if width < 1 {
 		width = 1
 	}
 
-	for i, note := range a.notes {
+	start, end, cursor := listViewport(len(a.notes), a.selected, a.listOffset, height)
+	a.listOffset = start
+	for i := start; i < end; i++ {
+		note := a.notes[i]
 		_, _ = fmt.Fprintln(v, listLine(note, i == a.selected, a.isUnread(note.ID), width))
 	}
-	a.syncListCursor(v)
+	_ = v.SetOrigin(0, 0)
+	_ = v.SetCursor(0, cursor)
 
 	return nil
 }
@@ -444,25 +453,42 @@ func (a *App) compactStatusHints() string {
 	return "↑↓ → n / c p e d r ? q"
 }
 
-func (a *App) syncListCursor(v *gocui.View) {
-	_, originY := v.Origin()
-	_, height := v.Size()
+func listViewport(total, selected, offset, height int) (start, end, cursor int) {
+	if total <= 0 {
+		return 0, 0, 0
+	}
 	if height < 1 {
 		height = 1
 	}
-
-	if a.selected < originY {
-		originY = a.selected
+	if selected < 0 {
+		selected = 0
 	}
-	if a.selected >= originY+height {
-		originY = a.selected - height + 1
-	}
-	if originY < 0 {
-		originY = 0
+	if selected >= total {
+		selected = total - 1
 	}
 
-	_ = v.SetOrigin(0, originY)
-	_ = v.SetCursor(0, a.selected-originY)
+	maxStart := total - height
+	if maxStart < 0 {
+		maxStart = 0
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > maxStart {
+		offset = maxStart
+	}
+	if selected < offset {
+		offset = selected
+	}
+	if selected >= offset+height {
+		offset = selected - height + 1
+	}
+
+	end = offset + height
+	if end > total {
+		end = total
+	}
+	return offset, end, selected - offset
 }
 
 func (a *App) selectedNote() (notes.Note, bool) {
@@ -688,7 +714,7 @@ func (a *App) clampSelection() {
 
 func (a *App) clampDetailOffset(v *gocui.View, note notes.Note) int {
 	width, height := v.Size()
-	maxOffset := maxDetailOffset(note.Body, width, height)
+	maxOffset := a.cachedDetailMaxOffset(note, width, height)
 	if a.detailOffset < 0 {
 		a.detailOffset = 0
 	}
@@ -706,7 +732,7 @@ func (a *App) scrollDetailBy(note notes.Note, delta, width, height int) int {
 		a.statusMode = statusDefault
 	}
 
-	maxOffset := maxDetailOffset(note.Body, width, height)
+	maxOffset := a.cachedDetailMaxOffset(note, width, height)
 	if a.detailOffset < 0 {
 		a.detailOffset = 0
 	}
@@ -867,7 +893,7 @@ func padLine(s string, width int) string {
 }
 
 func runeLen(s string) int {
-	return len([]rune(s))
+	return utf8.RuneCountInString(s)
 }
 
 func detailPageSize(g *gocui.Gui) int {
@@ -899,19 +925,58 @@ func maxDetailOffset(body string, width, height int) int {
 	return lines - height
 }
 
+type detailMetrics struct {
+	valid     bool
+	noteID    string
+	body      string
+	width     int
+	height    int
+	maxOffset int
+}
+
+func (a *App) cachedDetailMaxOffset(note notes.Note, width, height int) int {
+	cache := &a.detailMetrics
+	if cache.valid && cache.noteID == note.ID && cache.body == note.Body && cache.width == width && cache.height == height {
+		return cache.maxOffset
+	}
+
+	maxOffset := maxDetailOffset(note.Body, width, height)
+	*cache = detailMetrics{
+		valid:     true,
+		noteID:    note.ID,
+		body:      note.Body,
+		width:     width,
+		height:    height,
+		maxOffset: maxOffset,
+	}
+	return maxOffset
+}
+
 func visualLineCount(s string, width int) int {
 	if width < 1 || s == "" {
 		return 0
 	}
 
 	total := 0
-	for _, line := range strings.Split(s, "\n") {
+	for {
+		line := s
+		hasMore := false
+		if newline := strings.IndexByte(s, '\n'); newline >= 0 {
+			line = s[:newline]
+			s = s[newline+1:]
+			hasMore = true
+		} else {
+			s = ""
+		}
 		length := runeLen(line)
 		if length == 0 {
 			total++
-			continue
+		} else {
+			total += (length + width - 1) / width
 		}
-		total += (length + width - 1) / width
+		if !hasMore {
+			break
+		}
 	}
 	return total
 }

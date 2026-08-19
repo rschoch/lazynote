@@ -38,8 +38,14 @@ func (a *App) orderedNotes(loaded []notes.Note) []notes.Note {
 }
 
 func (a *App) applyFilter(selectedID string) {
+	if a.allNotes == nil && len(a.notes) > 0 {
+		a.allNotes = append([]notes.Note(nil), a.notes...)
+	}
 	source := a.sourceNotes()
-	a.notes = filterNotes(source, a.filterQuery)
+	if a.searchIndex == nil {
+		a.rebuildSearchIndex()
+	}
+	a.notes = filterNotes(source, a.filterQuery, a.searchIndex, a.notes[:0])
 	if selectedID != "" {
 		if index := noteIndexByID(a.notes, selectedID); index >= 0 {
 			if a.selected != index {
@@ -74,19 +80,59 @@ func (a *App) clearFilter() {
 	a.statusMode = statusMessage
 }
 
-func filterNotes(source []notes.Note, query string) []notes.Note {
-	query = strings.ToLower(strings.TrimSpace(query))
+type normalizedNote struct {
+	title string
+	body  string
+	tags  []string
+}
+
+func (a *App) rebuildSearchIndex() {
+	source := a.sourceNotes()
+	index := make(map[string]normalizedNote, len(source))
+	for _, note := range source {
+		tags := make([]string, len(note.Tags))
+		for i, tag := range note.Tags {
+			tags[i] = notes.FoldSearchText(tag)
+		}
+		index[note.ID] = normalizedNote{
+			title: notes.FoldSearchText(note.Title),
+			body:  notes.FoldSearchText(note.Body),
+			tags:  tags,
+		}
+	}
+	a.searchIndex = index
+}
+
+func filterNotes(source []notes.Note, query string, index map[string]normalizedNote, dst []notes.Note) []notes.Note {
+	query = notes.FoldSearchText(strings.TrimSpace(query))
 	if query == "" {
-		return append([]notes.Note(nil), source...)
+		return append(dst, source...)
 	}
 
-	filtered := make([]notes.Note, 0, len(source))
+	filtered := dst
 	for _, note := range source {
-		if notes.MatchesQuery(note, query) {
+		if matchesNormalizedNote(index[note.ID], query) {
 			filtered = append(filtered, note)
 		}
 	}
 	return filtered
+}
+
+func matchesNormalizedNote(note normalizedNote, query string) bool {
+	if strings.Contains(note.title, query) || strings.Contains(note.body, query) {
+		return true
+	}
+
+	tagQuery := strings.TrimPrefix(query, "#")
+	if tagQuery == "" {
+		return false
+	}
+	for _, tag := range note.tags {
+		if strings.Contains(tag, tagQuery) {
+			return true
+		}
+	}
+	return false
 }
 
 func addedNoteIDs(oldNotes, newNotes []notes.Note) map[string]struct{} {

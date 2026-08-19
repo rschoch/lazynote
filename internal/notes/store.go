@@ -379,13 +379,13 @@ func FormatTags(tags []string) string {
 
 // MatchesQuery reports whether a note matches a free-text or #tag query.
 func MatchesQuery(note Note, query string) bool {
-	query = strings.ToLower(strings.TrimSpace(query))
+	query = FoldSearchText(strings.TrimSpace(query))
 	if query == "" {
 		return true
 	}
 
-	if strings.Contains(strings.ToLower(note.Title), query) ||
-		strings.Contains(strings.ToLower(note.Body), query) {
+	if strings.Contains(FoldSearchText(note.Title), query) ||
+		strings.Contains(FoldSearchText(note.Body), query) {
 		return true
 	}
 
@@ -394,7 +394,7 @@ func MatchesQuery(note Note, query string) bool {
 		return false
 	}
 	for _, tag := range note.Tags {
-		if strings.Contains(strings.ToLower(tag), tagQuery) {
+		if strings.Contains(FoldSearchText(tag), tagQuery) {
 			return true
 		}
 	}
@@ -445,7 +445,6 @@ func (s *Store) saveUnlocked(notes []Note) error {
 	defer func() { _ = os.Remove(tmpName) }()
 
 	enc := json.NewEncoder(tmp)
-	enc.SetIndent("", "  ")
 	if err := enc.Encode(notes); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("encode notes: %w", err)

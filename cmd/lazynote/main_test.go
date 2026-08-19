@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,14 @@ import (
 
 	"github.com/rschoch/lazynote/internal/notes"
 )
+
+var errOutputFailed = errors.New("output failed")
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errOutputFailed
+}
 
 func TestRunAppendsNote(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notes.json")
@@ -562,6 +571,29 @@ func TestRunExportsNotesAsJSON(t *testing.T) {
 	}
 	if exported[0].ID != note.ID || exported[0].Title != "release plan" || exported[0].Body != "ship packages" {
 		t.Fatalf("exported unexpected note: %#v", exported[0])
+	}
+}
+
+func TestBulkCommandsReturnOutputErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+	if _, err := notes.NewStore(path).Append("release plan", "ship packages"); err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	commands := [][]string{
+		{"list"},
+		{"search", "release"},
+		{"export", "markdown"},
+		{"export", "json"},
+	}
+	for _, args := range commands {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			err := run(args, nil, failingWriter{})
+			if !errors.Is(err, errOutputFailed) {
+				t.Fatalf("run(%v) error = %v, want output failure", args, err)
+			}
+		})
 	}
 }
 

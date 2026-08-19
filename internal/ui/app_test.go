@@ -152,6 +152,35 @@ func TestDetailPaneScrollsLongNote(t *testing.T) {
 	}
 }
 
+func TestDetailMetricsCacheTracksContentAndDimensions(t *testing.T) {
+	app := &App{}
+	note := notes.Note{ID: "one", Body: strings.Repeat("wrapped body ", 20)}
+	initial := app.cachedDetailMaxOffset(note, 20, 5)
+	if initial <= 0 {
+		t.Fatalf("initial max offset = %d, want wrapped content", initial)
+	}
+
+	app.detailMetrics.maxOffset = 777
+	if got := app.cachedDetailMaxOffset(note, 20, 5); got != 777 {
+		t.Fatalf("cached max offset = %d, want cached value", got)
+	}
+	if got := app.cachedDetailMaxOffset(note, 40, 5); got == 777 {
+		t.Fatal("width change reused stale detail metrics")
+	}
+
+	app.detailMetrics.maxOffset = 777
+	note.Body += " changed"
+	if got := app.cachedDetailMaxOffset(note, 40, 5); got == 777 {
+		t.Fatal("body change reused stale detail metrics")
+	}
+
+	app.detailMetrics.maxOffset = 777
+	note.ID = "two"
+	if got := app.cachedDetailMaxOffset(note, 40, 5); got == 777 {
+		t.Fatal("selection change reused stale detail metrics")
+	}
+}
+
 func TestFocusControlsContextualUpDown(t *testing.T) {
 	app := &App{
 		notes: []notes.Note{
@@ -212,6 +241,30 @@ func TestNoteSelectionOnEmptyListDoesNothing(t *testing.T) {
 	}
 	if app.selected != 0 {
 		t.Fatalf("selected = %d, want empty list selection unchanged", app.selected)
+	}
+}
+
+func TestListViewportFollowsSelection(t *testing.T) {
+	tests := []struct {
+		name               string
+		total, selected    int
+		offset, height     int
+		start, end, cursor int
+	}{
+		{name: "first page", total: 100, selected: 0, height: 10, start: 0, end: 10, cursor: 0},
+		{name: "move below page", total: 100, selected: 10, height: 10, start: 1, end: 11, cursor: 9},
+		{name: "last page", total: 100, selected: 99, height: 10, start: 90, end: 100, cursor: 9},
+		{name: "wrap to first", total: 100, selected: 0, offset: 90, height: 10, start: 0, end: 10, cursor: 0},
+		{name: "short list", total: 3, selected: 2, height: 10, start: 0, end: 3, cursor: 2},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			start, end, cursor := listViewport(test.total, test.selected, test.offset, test.height)
+			if start != test.start || end != test.end || cursor != test.cursor {
+				t.Fatalf("listViewport() = (%d, %d, %d), want (%d, %d, %d)", start, end, cursor, test.start, test.end, test.cursor)
+			}
+		})
 	}
 }
 
@@ -643,6 +696,39 @@ func TestFilterMatchesTags(t *testing.T) {
 	}
 }
 
+func TestFilterIgnoresAccents(t *testing.T) {
+	app := &App{allNotes: []notes.Note{
+		{ID: "one", Title: "Café planning", Body: "Résumé for Zoë", Tags: []string{"déjà-vu"}},
+		{ID: "two", Title: "unrelated"},
+	}}
+
+	for _, query := range []string{"cafe", "RESUME", "zoe", "#deja-vu"} {
+		app.setFilterQuery(query)
+		if len(app.notes) != 1 || app.notes[0].ID != "one" {
+			t.Fatalf("filter %q returned %#v, want accent-insensitive match", query, app.notes)
+		}
+	}
+}
+
+func TestSearchIndexRefreshesWhenNotesChange(t *testing.T) {
+	app := &App{settings: DefaultSettings()}
+	app.applyLoadedNotes([]notes.Note{{ID: "one", Title: "old title", Body: "old body"}}, "")
+	app.setFilterQuery("old body")
+	if len(app.notes) != 1 {
+		t.Fatalf("initial filter returned %d notes, want 1", len(app.notes))
+	}
+
+	app.applyLoadedNotes([]notes.Note{{ID: "one", Title: "new title", Body: "new body"}}, "")
+	if len(app.notes) != 0 {
+		t.Fatalf("stale filter returned %d notes after update, want 0", len(app.notes))
+	}
+
+	app.setFilterQuery("NEW BODY")
+	if len(app.notes) != 1 || app.notes[0].ID != "one" {
+		t.Fatalf("updated filter returned %#v, want updated note", app.notes)
+	}
+}
+
 func TestClearFilterRestoresNotes(t *testing.T) {
 	app := &App{
 		allNotes: []notes.Note{
@@ -659,6 +745,20 @@ func TestClearFilterRestoresNotes(t *testing.T) {
 	}
 	if app.filterQuery != "" {
 		t.Fatalf("filterQuery = %q, want cleared", app.filterQuery)
+	}
+}
+
+func TestFilterPreservesSourceWhenInitializedWithVisibleNotes(t *testing.T) {
+	app := &App{notes: []notes.Note{
+		{ID: "one", Title: "release plan"},
+		{ID: "two", Title: "grocery list"},
+	}}
+
+	app.setFilterQuery("release")
+	app.clearFilter()
+
+	if len(app.notes) != 2 {
+		t.Fatalf("notes = %d, want restored source list", len(app.notes))
 	}
 }
 

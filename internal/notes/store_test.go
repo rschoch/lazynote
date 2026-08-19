@@ -1,6 +1,8 @@
 package notes
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -79,6 +81,28 @@ func TestStoreSaveNilWritesEmptyArray(t *testing.T) {
 	}
 	if string(data) != "[]\n" {
 		t.Fatalf("saved notes = %q, want empty JSON array", data)
+	}
+}
+
+func TestStoreSaveWritesCompactJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	store := NewStore(path)
+
+	if err := store.Save([]Note{{ID: "one", Title: "title", Body: "body"}}); err != nil {
+		t.Fatalf("save notes: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read saved notes: %v", err)
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, data); err != nil {
+		t.Fatalf("compact saved JSON: %v", err)
+	}
+	want := compact.String() + "\n"
+	if string(data) != want {
+		t.Fatalf("saved notes are not compact JSON:\n%s", data)
 	}
 }
 

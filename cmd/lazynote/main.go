@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -245,10 +246,13 @@ func runList(store *notes.Store, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	w := bufio.NewWriter(stdout)
 	for _, note := range loaded {
-		_, _ = fmt.Fprintln(stdout, noteSummary(note))
+		if _, err := fmt.Fprintln(w, noteSummary(note)); err != nil {
+			return err
+		}
 	}
-	return nil
+	return w.Flush()
 }
 
 func runShow(store *notes.Store, args []string, stdout io.Writer) error {
@@ -319,12 +323,15 @@ func runSearch(store *notes.Store, args []string, stdout io.Writer) error {
 		return err
 	}
 
+	w := bufio.NewWriter(stdout)
 	for _, note := range loaded {
 		if notes.MatchesQuery(note, query) {
-			_, _ = fmt.Fprintln(stdout, noteSummary(note))
+			if _, err := fmt.Fprintln(w, noteSummary(note)); err != nil {
+				return err
+			}
 		}
 	}
-	return nil
+	return w.Flush()
 }
 
 func runEdit(store *notes.Store, args []string, stdin io.Reader, stdout io.Writer) error {
@@ -550,17 +557,23 @@ func runExport(store *notes.Store, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	w := bufio.NewWriter(stdout)
 
+	var writeErr error
 	switch args[0] {
 	case "markdown", "md":
-		return writeMarkdownExport(stdout, loaded)
+		writeErr = writeMarkdownExport(w, loaded)
 	case "json":
-		enc := json.NewEncoder(stdout)
+		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		return enc.Encode(loaded)
+		writeErr = enc.Encode(loaded)
 	default:
 		return fmt.Errorf("usage: lazynote export <markdown|json>")
 	}
+	if writeErr != nil {
+		return writeErr
+	}
+	return w.Flush()
 }
 
 func runBackup(store *notes.Store, args []string, stdout io.Writer) error {

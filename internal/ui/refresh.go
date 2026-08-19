@@ -104,6 +104,7 @@ func (a *App) applyLoadedNotes(loaded []notes.Note, status string) bool {
 	if sameNotes(a.sourceNotes(), ordered) {
 		if a.allNotes == nil {
 			a.allNotes = ordered
+			a.rebuildSearchIndex()
 		}
 		a.reapplyFilter()
 		return false
@@ -120,6 +121,7 @@ func (a *App) applyLoadedNotes(loaded []notes.Note, status string) bool {
 	}
 
 	a.allNotes = ordered
+	a.rebuildSearchIndex()
 	a.applyFilter(selectedID)
 
 	a.pendingDeleteID = ""

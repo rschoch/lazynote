@@ -104,7 +104,8 @@ func (a *App) create(g *gocui.Gui, v *gocui.View) error {
 	}
 
 	a.allNotes = a.orderedNotes(loaded)
-	if a.filterQuery != "" && noteIndexByID(filterNotes(a.allNotes, a.filterQuery), note.ID) < 0 {
+	a.rebuildSearchIndex()
+	if a.filterQuery != "" && noteIndexByID(filterNotes(a.allNotes, a.filterQuery, a.searchIndex, nil), note.ID) < 0 {
 		a.filterQuery = ""
 	}
 	a.applyFilter(note.ID)
