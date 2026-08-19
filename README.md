@@ -304,12 +304,13 @@ Keys:
 - Esc: clear the active filter
 - `q` / Ctrl-C: quit
 
-Copy uses terminal clipboard support. Creating and editing open a temporary
-file whose first line is the note title and whose remaining content is the note
-body. The note body pane shows tags and edited timestamps when present. Pinned
-notes stay at the top of the list and use `▴` in the list gutter. Notes that
-arrive from another process while the TUI is open use `●` until selected.
-Fonts, glyph rendering, and colors depend on your terminal emulator.
+Copy uses the native macOS clipboard when available and terminal clipboard
+support on Linux, WSL, and Windows. Creating and editing open a temporary file
+whose first line is the note title and whose remaining content is the note body.
+The note body pane shows tags and edited timestamps when present. Pinned notes
+stay at the top of the list and use `▴` in the list gutter. Notes that arrive
+from another process while the TUI is open use `●` until selected. Fonts, glyph
+rendering, and colors depend on your terminal emulator.
 
 Set your preferred external editor before launching `lazynote`:
 

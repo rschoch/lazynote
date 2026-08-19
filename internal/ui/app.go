@@ -1,10 +1,8 @@
 package ui
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/awesome-gocui/gocui"
@@ -733,22 +731,7 @@ func (a *App) writeClipboard(text string) error {
 	if a.copyText != nil {
 		return a.copyText(text)
 	}
-	return writeOSC52Clipboard(text)
-}
-
-func writeOSC52Clipboard(text string) error {
-	encoded := base64.StdEncoding.EncodeToString([]byte(text))
-	sequence := "\x1b]52;c;" + encoded + "\a"
-
-	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
-	if err == nil {
-		defer func() { _ = tty.Close() }()
-		_, err = tty.WriteString(sequence)
-		return err
-	}
-
-	_, err = os.Stdout.WriteString(sequence)
-	return err
+	return writePlatformClipboard(text)
 }
 
 func (a *App) setCurrentView(g *gocui.Gui) error {
