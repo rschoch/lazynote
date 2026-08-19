@@ -12,7 +12,7 @@ import (
 )
 
 func (a *App) edit(g *gocui.Gui, v *gocui.View) error {
-	if a.inputMode == inputSearch || a.hasPopup() {
+	if a.inputMode != inputNormal || a.hasPopup() {
 		return nil
 	}
 
@@ -63,7 +63,7 @@ func (a *App) edit(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) create(g *gocui.Gui, v *gocui.View) error {
-	if a.inputMode == inputSearch || a.hasPopup() {
+	if a.inputMode != inputNormal || a.hasPopup() {
 		return nil
 	}
 
@@ -105,6 +105,9 @@ func (a *App) create(g *gocui.Gui, v *gocui.View) error {
 
 	a.allNotes = a.orderedNotes(loaded)
 	a.rebuildSearchIndex()
+	if !a.currentView.includes(note) {
+		a.currentView = noteView{kind: viewActive}
+	}
 	if a.filterQuery != "" && noteIndexByID(filterNotes(a.allNotes, a.filterQuery, a.searchIndex, nil), note.ID) < 0 {
 		a.filterQuery = ""
 	}

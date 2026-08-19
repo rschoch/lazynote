@@ -9,9 +9,14 @@ import (
 
 // Popup is the small modal surface used for help and future confirmations/menus.
 type Popup struct {
-	Title   string
-	Lines   []string
-	OnClose func()
+	Title    string
+	Lines    []string
+	Selected int
+	Offset   int
+	OnSelect func(*gocui.Gui, int) error
+	OnToggle func(*gocui.Gui, int) error
+	OnNew    func(*gocui.Gui) error
+	OnClose  func()
 }
 
 func (a *App) hasPopup() bool {
@@ -24,6 +29,41 @@ func (a *App) openPopup(popup Popup) {
 
 func (a *App) closePopupKey(g *gocui.Gui, v *gocui.View) error {
 	return a.closePopup(g)
+}
+
+func (a *App) selectPopupKey(g *gocui.Gui, v *gocui.View) error {
+	if a.popup == nil || a.popup.OnSelect == nil {
+		return a.closePopup(g)
+	}
+	return a.popup.OnSelect(g, a.popup.Selected)
+}
+
+func (a *App) togglePopupKey(g *gocui.Gui, v *gocui.View) error {
+	if a.popup == nil || a.popup.OnToggle == nil {
+		return nil
+	}
+	return a.popup.OnToggle(g, a.popup.Selected)
+}
+
+func (a *App) newPopupItemKey(g *gocui.Gui, v *gocui.View) error {
+	if a.popup == nil || a.popup.OnNew == nil {
+		return nil
+	}
+	return a.popup.OnNew(g)
+}
+
+func (a *App) movePopup(delta int) error {
+	if a.popup == nil || a.popup.OnSelect == nil || len(a.popup.Lines) == 0 {
+		return nil
+	}
+	a.popup.Selected += delta
+	if a.popup.Selected < 0 {
+		a.popup.Selected = len(a.popup.Lines) - 1
+	}
+	if a.popup.Selected >= len(a.popup.Lines) {
+		a.popup.Selected = 0
+	}
+	return nil
 }
 
 func (a *App) closePopup(g *gocui.Gui) error {
@@ -46,7 +86,7 @@ func (a *App) toggleHelp(g *gocui.Gui, v *gocui.View) error {
 	if a.hasPopup() {
 		return a.closePopup(g)
 	}
-	if a.inputMode == inputSearch {
+	if a.inputMode != inputNormal {
 		return nil
 	}
 
@@ -65,6 +105,9 @@ func (a *App) toggleHelp(g *gocui.Gui, v *gocui.View) error {
 			"c         copy selected title/body",
 			"e         edit selected note",
 			"p         pin or unpin selected note",
+			"t         add or remove tags",
+			"a         archive or restore selected note",
+			"v         switch note view",
 			"d         delete; press twice to confirm",
 			"r         reload notes from disk",
 			"?         close this popup",
@@ -116,11 +159,24 @@ func (a *App) layoutPopup(g *gocui.Gui, maxX, maxY int) error {
 	if visibleLines < 0 {
 		visibleLines = 0
 	}
-	for i, line := range a.popup.Lines {
-		if i >= visibleLines {
-			break
+	if a.popup.OnSelect != nil {
+		start, end, cursor := listViewport(len(a.popup.Lines), a.popup.Selected, a.popup.Offset, visibleLines)
+		a.popup.Offset = start
+		for i := start; i < end; i++ {
+			marker := "  "
+			if i == a.popup.Selected {
+				marker = "› "
+			}
+			_, _ = fmt.Fprintln(v, fitLine(marker+a.popup.Lines[i], width-2))
 		}
-		_, _ = fmt.Fprintln(v, fitLine(line, width-2))
+		_ = v.SetCursor(0, cursor)
+	} else {
+		for i, line := range a.popup.Lines {
+			if i >= visibleLines {
+				break
+			}
+			_, _ = fmt.Fprintln(v, fitLine(line, width-2))
+		}
 	}
 	return nil
 }
@@ -154,7 +210,10 @@ func (a *App) popupSize(maxX, maxY int) (int, int) {
 	if maxY < height+4 {
 		height = maxY - 4
 	}
-	if height < 10 {
+	if height < 6 {
+		height = 6
+	}
+	if height > maxY-2 {
 		height = maxY - 2
 	}
 	if height < 1 {

@@ -491,6 +491,47 @@ func TestRunPinsAndUnpinsNote(t *testing.T) {
 	}
 }
 
+func TestRunArchivesAndUnarchivesNote(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	store := notes.NewStore(path)
+	note, err := store.Append("archive me", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"archive", note.ID[:6]}, nil, &stdout); err != nil {
+		t.Fatalf("run archive: %v", err)
+	}
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if !loaded[0].Archived {
+		t.Fatal("note is not archived")
+	}
+	if !strings.Contains(stdout.String(), "archived") {
+		t.Fatalf("stdout = %q, want archived metadata", stdout.String())
+	}
+	if err := run([]string{"pin", note.ID[:6]}, nil, &stdout); !errors.Is(err, notes.ErrArchivedNote) {
+		t.Fatalf("pin archived note error = %v, want ErrArchivedNote", err)
+	}
+
+	stdout.Reset()
+	if err := run([]string{"unarchive", note.ID[:6]}, nil, &stdout); err != nil {
+		t.Fatalf("run unarchive: %v", err)
+	}
+	loaded, err = store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if loaded[0].Archived {
+		t.Fatal("note is still archived")
+	}
+}
+
 func TestRunTagsAndUntagsNote(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notes.json")
 	t.Setenv("LAZYNOTE_PATH", path)

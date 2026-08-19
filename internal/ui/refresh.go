@@ -44,7 +44,7 @@ func (a *App) startAutoRefresh(g *gocui.Gui, interval time.Duration) func() {
 			currentSnapshot, err := snapshotFile(path)
 			if err != nil {
 				refreshErr := err
-				g.Update(func(*gocui.Gui) error {
+				g.UpdateAsync(func(*gocui.Gui) error {
 					a.refreshFailed(refreshErr)
 					return nil
 				})
@@ -57,7 +57,7 @@ func (a *App) startAutoRefresh(g *gocui.Gui, interval time.Duration) func() {
 			loaded, err := a.store.Load()
 			if err != nil {
 				refreshErr := err
-				g.Update(func(*gocui.Gui) error {
+				g.UpdateAsync(func(*gocui.Gui) error {
 					a.refreshFailed(refreshErr)
 					return nil
 				})
@@ -67,7 +67,7 @@ func (a *App) startAutoRefresh(g *gocui.Gui, interval time.Duration) func() {
 			stableSnapshot, err := snapshotFile(path)
 			if err != nil {
 				refreshErr := err
-				g.Update(func(*gocui.Gui) error {
+				g.UpdateAsync(func(*gocui.Gui) error {
 					a.refreshFailed(refreshErr)
 					return nil
 				})
@@ -78,8 +78,9 @@ func (a *App) startAutoRefresh(g *gocui.Gui, interval time.Duration) func() {
 			}
 			lastSnapshot = stableSnapshot
 
-			g.Update(func(*gocui.Gui) error {
-				a.applyLoadedNotes(loaded, "Notes updated")
+			expectedSnapshot := stableSnapshot
+			g.UpdateAsync(func(*gocui.Gui) error {
+				a.applyRefreshSnapshot(path, expectedSnapshot, loaded)
 				return nil
 			})
 		}
@@ -91,6 +92,19 @@ func (a *App) startAutoRefresh(g *gocui.Gui, interval time.Duration) func() {
 			<-stopped
 		})
 	}
+}
+
+func (a *App) applyRefreshSnapshot(path string, expected fileSnapshot, loaded []notes.Note) bool {
+	current, err := snapshotFile(path)
+	if err != nil {
+		a.refreshFailed(err)
+		return false
+	}
+	if current != expected {
+		return false
+	}
+	a.applyLoadedNotes(loaded, "Notes updated")
+	return true
 }
 
 func (a *App) refreshFailed(err error) {
@@ -153,7 +167,7 @@ func (a *App) reloadNotesFromDisk(status string) error {
 }
 
 func (a *App) manualRefresh(g *gocui.Gui, v *gocui.View) error {
-	if a.inputMode == inputSearch || a.hasPopup() {
+	if a.inputMode != inputNormal || a.hasPopup() {
 		return nil
 	}
 
@@ -179,6 +193,7 @@ func sameNotes(a, b []notes.Note) bool {
 			a[i].Title != b[i].Title ||
 			a[i].Body != b[i].Body ||
 			a[i].Pinned != b[i].Pinned ||
+			a[i].Archived != b[i].Archived ||
 			!sameTimePtr(a[i].UpdatedAt, b[i].UpdatedAt) ||
 			!sameStringSlice(a[i].Tags, b[i].Tags) ||
 			!a[i].CreatedAt.Equal(b[i].CreatedAt) {

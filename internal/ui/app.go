@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -39,6 +40,7 @@ type App struct {
 	theme           Theme
 	settings        Settings
 	allNotes        []notes.Note
+	viewSource      []notes.Note
 	searchIndex     map[string]normalizedNote
 	unreadIDs       map[string]struct{}
 	notes           []notes.Note
@@ -53,8 +55,11 @@ type App struct {
 	popup           *Popup
 	copyText        func(string) error
 	filterQuery     string
+	currentView     noteView
 	searchInput     string
 	searchOriginal  string
+	tagInput        string
+	tagTargetID     string
 	inputMode       inputMode
 	editor          string
 	editNote        func(notes.Note) (string, string, bool, error)
@@ -74,6 +79,7 @@ type inputMode int
 const (
 	inputNormal inputMode = iota
 	inputSearch
+	inputTag
 )
 
 // Option configures an App.
@@ -176,6 +182,9 @@ func (a *App) keybindings(g *gocui.Gui) error {
 		{"", 'e', a.edit},
 		{"", 'n', a.create},
 		{"", 'p', a.togglePin},
+		{"", 'a', a.toggleArchive},
+		{"", 't', a.openTagPicker},
+		{"", 'v', a.openViewPicker},
 		{"", 'r', a.manualRefresh},
 		{"", '/', a.startSearch},
 		{"", gocui.KeyEsc, a.clearFilterKey},
@@ -189,7 +198,9 @@ func (a *App) keybindings(g *gocui.Gui) error {
 		{popupView, 'q', a.closePopupKey},
 		{popupView, '?', a.closePopupKey},
 		{popupView, gocui.KeyEsc, a.closePopupKey},
-		{popupView, gocui.KeyEnter, a.closePopupKey},
+		{popupView, gocui.KeyEnter, a.selectPopupKey},
+		{popupView, gocui.KeySpace, a.togglePopupKey},
+		{popupView, 'n', a.newPopupItemKey},
 	}
 
 	for _, binding := range bindings {
@@ -256,11 +267,12 @@ func (a *App) layoutNotes(g *gocui.Gui, x0, y0, x1, y1 int) error {
 		return err
 	}
 
+	viewed := a.viewNotes()
 	if a.filterQuery != "" {
-		v.Title = fmt.Sprintf(" Notes %d/%d ", len(a.notes), len(a.sourceNotes()))
+		v.Title = fmt.Sprintf(" %s %d/%d ", a.currentView.label(), len(a.notes), len(viewed))
 		v.Subtitle = " /" + fitLine(a.filterQuery, 18) + " "
 	} else {
-		v.Title = fmt.Sprintf(" Notes %d ", len(a.notes))
+		v.Title = fmt.Sprintf(" %s %d ", a.currentView.label(), len(a.notes))
 		v.Subtitle = ""
 	}
 	v.TitleColor = a.paneTitleColor(paneNotes)
@@ -275,11 +287,7 @@ func (a *App) layoutNotes(g *gocui.Gui, x0, y0, x1, y1 int) error {
 
 	if len(a.notes) == 0 {
 		v.FgColor = theme.MutedFg
-		if a.filterQuery != "" {
-			_, _ = fmt.Fprintln(v, "No matches")
-		} else {
-			_, _ = fmt.Fprintln(v, "No notes yet")
-		}
+		_, _ = fmt.Fprintln(v, a.emptyNotesMessage())
 		_ = v.SetOrigin(0, 0)
 		_ = v.SetCursor(0, 0)
 		return nil
@@ -326,14 +334,18 @@ func (a *App) layoutDetail(g *gocui.Gui, x0, y0, x1, y1 int) error {
 		if a.filterQuery != "" {
 			_, _ = fmt.Fprintln(v, "No matching note.")
 		} else {
-			_, _ = fmt.Fprintln(v, "No notes yet.")
+			_, _ = fmt.Fprintln(v, a.emptyNotesMessage()+".")
 		}
 		return nil
 	}
 
-	v.Title = " " + oneLine(note.Title) + " "
 	width, _ := v.Size()
-	v.Subtitle = " " + fitLine(noteSubtitle(note), width-2) + " "
+	title, subtitle := detailHeader(oneLine(note.Title), noteSubtitle(note), width)
+	v.Title = " " + title + " "
+	v.Subtitle = ""
+	if subtitle != "" {
+		v.Subtitle = " " + subtitle + " "
+	}
 	if note.Body != "" {
 		_, _ = fmt.Fprintln(v, note.Body)
 	}
@@ -352,9 +364,9 @@ func (a *App) layoutStatus(g *gocui.Gui, x0, y0, x1, y1 int) error {
 	v.Frame = false
 	v.BgColor = theme.DefaultBg
 	v.FgColor = theme.StatusFg
-	v.Editable = a.inputMode == inputSearch
+	v.Editable = a.inputMode != inputNormal
 	if v.Editable {
-		v.Editor = searchEditor{app: a}
+		v.Editor = inputEditor{app: a}
 	}
 	v.Clear()
 
@@ -366,9 +378,17 @@ func (a *App) layoutStatus(g *gocui.Gui, x0, y0, x1, y1 int) error {
 		_ = v.SetCursor(runeLen(line), 0)
 		return nil
 	}
+	if a.inputMode == inputTag {
+		g.Cursor = true
+		line := "New tag: #" + a.tagInput
+		_, _ = fmt.Fprint(v, fitLine(line, width))
+		_ = v.SetCursor(runeLen(line), 0)
+		return nil
+	}
 
 	g.Cursor = false
-	_, _ = fmt.Fprint(v, fitLine(a.statusLineForWidth(width), width))
+	plain := fitLine(a.statusLineForWidth(width), width)
+	_, _ = fmt.Fprint(v, a.renderStatusLine(plain))
 
 	return nil
 }
@@ -384,11 +404,16 @@ func (a *App) statusLineForWidth(width int) string {
 		return line
 	}
 
+	smart := fmt.Sprintf(" %s   %s  … ", status, a.smartStatusHints())
+	if runeLen(smart) <= width {
+		return smart
+	}
+
 	compact := fmt.Sprintf(" %s   %s ", status, a.compactStatusHints())
-	if runeLen(compact) < runeLen(line) {
+	if runeLen(compact) < runeLen(smart) {
 		return compact
 	}
-	return line
+	return smart
 }
 
 func (a *App) statusText() string {
@@ -400,7 +425,7 @@ func (a *App) statusText() string {
 	if _, ok := a.selectedNote(); ok {
 		status = fmt.Sprintf("%s %d/%d", statusIcon, a.selected+1, len(a.notes))
 		if a.filterQuery != "" {
-			status = fmt.Sprintf("%s of %d  filter %q", status, len(a.sourceNotes()), a.filterQuery)
+			status = fmt.Sprintf("%s of %d  filter %q", status, len(a.viewNotes()), a.filterQuery)
 		}
 		if a.activePane == paneDetail && a.detailOffset > 0 {
 			status = fmt.Sprintf("%s  scroll +%d", status, a.detailOffset)
@@ -412,45 +437,184 @@ func (a *App) statusText() string {
 func (a *App) statusHints() string {
 	switch a.statusMode {
 	case statusDeleteArmed:
-		return "d confirm   ↑↓ cancel   q quit"
+		return "delete  ↑↓ cancel │ ? help  quit"
 	}
 
 	if _, ok := a.selectedNote(); !ok {
 		if a.filterQuery != "" {
-			return "n new   / filter   Esc clear   r reload   ? help   q quit"
+			return "/ filter  Esc clear  views │ new │ reload │ ? help  quit"
 		}
-		return "n new   / filter   r reload   ? help   q quit"
+		return "/ filter  views │ new │ reload │ ? help  quit"
 	}
 
 	if a.activePane == paneDetail {
-		return "↑↓ scroll   Pg page   ← list   n new   c copy   e edit   p pin   r reload   ? help   q quit"
+		return fmt.Sprintf("↑↓ scroll  Pg page  ← list │ new  edit  copy │ %s │ delete  reload │ ? help  quit", a.organizationHints())
 	}
 	if a.filterQuery != "" {
-		return "↑↓ nav   → body   n new   / filter   Esc clear   c copy   p pin   e edit   d del   r reload   ? help   q quit"
+		return fmt.Sprintf("↑↓ nav  → body  / filter  Esc clear  views │ new  edit  copy │ %s │ delete  reload │ ? help  quit", a.organizationHints())
 	}
-	return "↑↓ nav   → body   n new   / filter   c copy   p pin   e edit   d del   r reload   ? help   q quit"
+	return fmt.Sprintf("↑↓ nav  → body  / filter  views │ new  edit  copy │ %s │ delete  reload │ ? help  quit", a.organizationHints())
+}
+
+func (a *App) organizationHints() string {
+	note, ok := a.selectedNote()
+	if !ok {
+		return "tags"
+	}
+	if note.Archived {
+		if note.Pinned {
+			return "unpin  tags  unarchive"
+		}
+		return "tags  unarchive"
+	}
+	if note.Pinned {
+		return "unpin  tags  archive"
+	}
+	return "pin  tags  archive"
+}
+
+func (a *App) smartStatusHints() string {
+	switch a.statusMode {
+	case statusDeleteArmed:
+		return "delete  ↑↓ cancel │ ? help"
+	}
+
+	if _, ok := a.selectedNote(); !ok {
+		if a.filterQuery != "" {
+			return "/ filter  Esc clear  views │ new │ ? help"
+		}
+		return "/ filter  views │ new │ ? help"
+	}
+
+	if a.activePane == paneDetail {
+		return "↑↓ scroll  ← list │ edit  copy │ ? help"
+	}
+	if a.filterQuery != "" {
+		return "↑↓ nav  → body  / filter  Esc clear  views │ new │ ? help"
+	}
+	return "↑↓ nav  → body  / filter  views │ new │ ? help"
+}
+
+var highlightedStatusWords = []struct {
+	word string
+	key  rune
+}{
+	{"unarchive", 'a'},
+	{"archive", 'a'},
+	{"copy", 'c'},
+	{"delete", 'd'},
+	{"edit", 'e'},
+	{"new", 'n'},
+	{"unpin", 'p'},
+	{"pin", 'p'},
+	{"quit", 'q'},
+	{"reload", 'r'},
+	{"tags", 't'},
+	{"views", 'v'},
+}
+
+func (a *App) emptyNotesMessage() string {
+	if a.filterQuery != "" {
+		return "No matches"
+	}
+	switch a.currentView.kind {
+	case viewPinned:
+		return "No pinned notes"
+	case viewRecent:
+		return "No recent notes"
+	case viewUntagged:
+		return "No untagged notes"
+	case viewArchived:
+		return "No archived notes"
+	case viewTag:
+		return "No notes tagged #" + a.currentView.tag
+	default:
+		return "No active notes"
+	}
+}
+
+func (a *App) renderStatusLine(line string) string {
+	statusPrefix := " " + a.statusText() + "   "
+	if !strings.HasPrefix(line, statusPrefix) {
+		return line
+	}
+	hints := strings.TrimPrefix(line, statusPrefix)
+	return statusPrefix + a.highlightStatusHints(hints)
+}
+
+func (a *App) highlightStatusHints(hints string) string {
+	accent := ansiAttribute(a.themeColors().ActiveBorder)
+	if accent == "" {
+		return hints
+	}
+	replacerArgs := make([]string, 0, len(highlightedStatusWords)*2)
+	for _, hint := range highlightedStatusWords {
+		runes := []rune(hint.word)
+		keyIndex := -1
+		for i, r := range runes {
+			if r == hint.key {
+				keyIndex = i
+				break
+			}
+		}
+		if keyIndex < 0 {
+			continue
+		}
+		highlighted := string(runes[:keyIndex]) + accent + string(runes[keyIndex]) + "\x1b[0m" + string(runes[keyIndex+1:])
+		replacerArgs = append(replacerArgs, hint.word, highlighted)
+	}
+	return strings.NewReplacer(replacerArgs...).Replace(hints)
+}
+
+func ansiAttribute(attr gocui.Attribute) string {
+	params := make([]string, 0, 8)
+	if attr.IsValidColor() {
+		r, g, b := attr.RGB()
+		if r >= 0 && g >= 0 && b >= 0 {
+			params = append(params, "38", "2", strconv.Itoa(int(r)), strconv.Itoa(int(g)), strconv.Itoa(int(b)))
+		}
+	}
+	for _, effect := range []struct {
+		attr gocui.Attribute
+		code string
+	}{
+		{gocui.AttrBold, "1"},
+		{gocui.AttrDim, "2"},
+		{gocui.AttrItalic, "3"},
+		{gocui.AttrUnderline, "4"},
+		{gocui.AttrReverse, "7"},
+		{gocui.AttrStrikeThrough, "9"},
+	} {
+		if attr&effect.attr != 0 {
+			params = append(params, effect.code)
+		}
+	}
+	if len(params) == 0 {
+		return ""
+	}
+	return "\x1b[" + strings.Join(params, ";") + "m"
 }
 
 func (a *App) compactStatusHints() string {
 	switch a.statusMode {
 	case statusDeleteArmed:
-		return "d ok ↑↓ cancel q"
+		return "d ↑↓ ?"
 	}
 
 	if _, ok := a.selectedNote(); !ok {
 		if a.filterQuery != "" {
-			return "n / Esc r ? q"
+			return "/ Esc v │ n │ r │ ? q"
 		}
-		return "n / r ? q"
+		return "/ v │ n │ r │ ? q"
 	}
 
 	if a.activePane == paneDetail {
-		return "↑↓ Pg ← n c e p r ? q"
+		return "↑↓ Pg ← │ n e c │ p t a │ d r │ ? q"
 	}
 	if a.filterQuery != "" {
-		return "↑↓ → n / Esc c p e d r ? q"
+		return "↑↓ → / Esc v │ n e c │ p t a │ d r │ ? q"
 	}
-	return "↑↓ → n / c p e d r ? q"
+	return "↑↓ → / v │ n e c │ p t a │ d r │ ? q"
 }
 
 func listViewport(total, selected, offset, height int) (start, end, cursor int) {
@@ -500,7 +664,7 @@ func (a *App) selectedNote() (notes.Note, bool) {
 
 func (a *App) up(g *gocui.Gui, v *gocui.View) error {
 	if a.hasPopup() {
-		return nil
+		return a.movePopup(-1)
 	}
 	if a.activePane == paneDetail {
 		return a.scrollDetail(g, -1)
@@ -523,7 +687,7 @@ func (a *App) up(g *gocui.Gui, v *gocui.View) error {
 
 func (a *App) down(g *gocui.Gui, v *gocui.View) error {
 	if a.hasPopup() {
-		return nil
+		return a.movePopup(1)
 	}
 	if a.activePane == paneDetail {
 		return a.scrollDetail(g, 1)
@@ -647,6 +811,11 @@ func (a *App) togglePin(g *gocui.Gui, v *gocui.View) error {
 	}
 	note, ok := a.selectedNote()
 	if !ok {
+		return nil
+	}
+	if note.Archived && !note.Pinned {
+		a.status = "Restore note before pinning"
+		a.statusMode = statusMessage
 		return nil
 	}
 
@@ -773,7 +942,7 @@ func (a *App) setCurrentView(g *gocui.Gui) error {
 		return err
 	}
 
-	if a.inputMode == inputSearch {
+	if a.inputMode != inputNormal {
 		_, err := g.SetCurrentView(statusView)
 		return err
 	}
@@ -825,6 +994,37 @@ func noteSubtitle(note notes.Note) string {
 		parts = append(parts, tags)
 	}
 	return strings.Join(parts, "  ")
+}
+
+func detailHeader(title, subtitle string, width int) (string, string) {
+	// gocui positions titles and subtitles with additional frame padding that
+	// is not included in View.Size. Reserve enough room for both labels and a
+	// visible run of frame characters between them.
+	available := width - 12
+	if available < 1 {
+		return fitLine(title, 1), ""
+	}
+	if subtitle == "" {
+		return fitLine(title, available), ""
+	}
+	if runeLen(title)+runeLen(subtitle)+2 <= available {
+		return title, subtitle
+	}
+
+	const minTitleWidth = 12
+	subtitleBudget := available / 3
+	if subtitleBudget < 16 {
+		subtitleBudget = 16
+	}
+	titleBudget := available - subtitleBudget - 2
+	if titleBudget < minTitleWidth {
+		return fitLine(title, available), ""
+	}
+	if runeLen(title) < titleBudget {
+		titleBudget = runeLen(title)
+		subtitleBudget = available - titleBudget - 2
+	}
+	return fitLine(title, titleBudget), fitLine(subtitle, subtitleBudget)
 }
 
 func listLine(note notes.Note, selected, unread bool, width int) string {

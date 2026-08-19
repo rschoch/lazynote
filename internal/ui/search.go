@@ -6,12 +6,16 @@ import (
 	"github.com/awesome-gocui/gocui"
 )
 
-type searchEditor struct {
+type inputEditor struct {
 	app *App
 }
 
-func (e searchEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
-	if e.app == nil || e.app.inputMode != inputSearch {
+func (e inputEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
+	if e.app == nil || e.app.inputMode == inputNormal {
+		return
+	}
+	if e.app.inputMode == inputTag {
+		e.editTag(key, ch, mod)
 		return
 	}
 
@@ -29,6 +33,22 @@ func (e searchEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modi
 		if ch != 0 && mod == gocui.ModNone {
 			e.app.searchInput += string(ch)
 			e.app.setFilterQuery(e.app.searchInput)
+		}
+	}
+}
+
+func (e inputEditor) editTag(key gocui.Key, ch rune, mod gocui.Modifier) {
+	switch key {
+	case gocui.KeyBackspace, gocui.KeyBackspace2:
+		if e.app.tagInput != "" {
+			runes := []rune(e.app.tagInput)
+			e.app.tagInput = string(runes[:len(runes)-1])
+		}
+	case gocui.KeyCtrlU:
+		e.app.tagInput = ""
+	default:
+		if ch != 0 && mod == gocui.ModNone {
+			e.app.tagInput += string(ch)
 		}
 	}
 }
@@ -54,6 +74,9 @@ func (a *App) startSearch(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) confirmSearch(g *gocui.Gui, v *gocui.View) error {
+	if a.inputMode == inputTag {
+		return a.confirmNewTag(g)
+	}
 	if a.inputMode != inputSearch {
 		return nil
 	}
@@ -70,6 +93,14 @@ func (a *App) confirmSearch(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (a *App) cancelSearch(g *gocui.Gui, v *gocui.View) error {
+	if a.inputMode == inputTag {
+		a.inputMode = inputNormal
+		a.tagInput = ""
+		a.tagTargetID = ""
+		a.status = "Tag canceled"
+		a.statusMode = statusMessage
+		return a.setCurrentView(g)
+	}
 	if a.inputMode != inputSearch {
 		return nil
 	}

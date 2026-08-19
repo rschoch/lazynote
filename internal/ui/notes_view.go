@@ -15,6 +15,29 @@ func (a *App) sourceNotes() []notes.Note {
 	return a.notes
 }
 
+func (a *App) viewNotes() []notes.Note {
+	return a.viewSource
+}
+
+func (a *App) rebuildViewNotes() {
+	source := a.sourceNotes()
+	viewed := a.viewSource[:0]
+	for _, note := range source {
+		if a.currentView.includes(note) {
+			viewed = append(viewed, note)
+		}
+	}
+	if a.currentView.kind == viewRecent {
+		sort.SliceStable(viewed, func(i, j int) bool {
+			return viewed[i].CreatedAt.After(viewed[j].CreatedAt)
+		})
+		if len(viewed) > recentNoteLimit {
+			viewed = viewed[:recentNoteLimit]
+		}
+	}
+	a.viewSource = viewed
+}
+
 func (a *App) orderedNotes(loaded []notes.Note) []notes.Note {
 	ordered := make([]notes.Note, len(loaded))
 	copy(ordered, loaded)
@@ -41,10 +64,11 @@ func (a *App) applyFilter(selectedID string) {
 	if a.allNotes == nil && len(a.notes) > 0 {
 		a.allNotes = append([]notes.Note(nil), a.notes...)
 	}
-	source := a.sourceNotes()
 	if a.searchIndex == nil {
 		a.rebuildSearchIndex()
 	}
+	a.rebuildViewNotes()
+	source := a.viewNotes()
 	a.notes = filterNotes(source, a.filterQuery, a.searchIndex, a.notes[:0])
 	if selectedID != "" {
 		if index := noteIndexByID(a.notes, selectedID); index >= 0 {

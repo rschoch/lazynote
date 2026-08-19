@@ -104,6 +104,10 @@ func runStoreCommand(store *notes.Store, args []string, stdin io.Reader, stdout 
 		return true, runPin(store, args[1:], stdout)
 	case "unpin":
 		return true, runUnpin(store, args[1:], stdout)
+	case "archive":
+		return true, runArchive(store, args[1:], stdout)
+	case "unarchive":
+		return true, runUnarchive(store, args[1:], stdout)
 	case "tag":
 		return true, runTag(store, args[1:], stdout)
 	case "untag":
@@ -185,6 +189,8 @@ func printUsage(w io.Writer) {
   lazynote delete <id>
   lazynote pin [--toggle] <id>
   lazynote unpin <id>
+  lazynote archive <id>
+  lazynote unarchive <id>
   lazynote tag <id> <tag>...
   lazynote untag <id> <tag>...
   lazynote tags <id>
@@ -212,6 +218,8 @@ Commands:
   delete <id>     Delete a note
   pin <id>        Pin a note
   unpin <id>      Unpin a note
+  archive <id>    Hide a note from the active TUI views
+  unarchive <id>  Restore an archived note
   tag <id> <tag>...
                   Add tags to a note
   untag <id> <tag>...
@@ -282,6 +290,9 @@ func runShow(store *notes.Store, args []string, stdout io.Writer) error {
 	}
 	if note.Pinned {
 		_, _ = fmt.Fprintln(stdout, "pinned: true")
+	}
+	if note.Archived {
+		_, _ = fmt.Fprintln(stdout, "archived: true")
 	}
 	if tags := notes.FormatTags(note.Tags); tags != "" {
 		_, _ = fmt.Fprintf(stdout, "tags: %s\n", tags)
@@ -481,6 +492,46 @@ func setPinned(store *notes.Store, args []string, pinned bool, stdout io.Writer)
 	return nil
 }
 
+func runArchive(store *notes.Store, args []string, stdout io.Writer) error {
+	return setArchived(store, args, true, stdout)
+}
+
+func runUnarchive(store *notes.Store, args []string, stdout io.Writer) error {
+	return setArchived(store, args, false, stdout)
+}
+
+func setArchived(store *notes.Store, args []string, archived bool, stdout io.Writer) error {
+	if len(args) != 1 {
+		if archived {
+			return fmt.Errorf("usage: lazynote archive <id>")
+		}
+		return fmt.Errorf("usage: lazynote unarchive <id>")
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		return err
+	}
+	note, err := findNote(loaded, args[0])
+	if err != nil {
+		return err
+	}
+	updated, _, err := store.SetArchived(note.ID, archived)
+	if err != nil {
+		return err
+	}
+	note, err = findNote(updated, note.ID)
+	if err != nil {
+		return err
+	}
+	if archived {
+		_, _ = fmt.Fprintln(stdout, "Archived "+noteSummary(note))
+	} else {
+		_, _ = fmt.Fprintln(stdout, "Unarchived "+noteSummary(note))
+	}
+	return nil
+}
+
 func runTag(store *notes.Store, args []string, stdout io.Writer) error {
 	if len(args) < 2 {
 		return fmt.Errorf("usage: lazynote tag <id> <tag> [<tag>...]")
@@ -618,6 +669,11 @@ func writeMarkdownExport(w io.Writer, loaded []notes.Note) error {
 				return err
 			}
 		}
+		if note.Archived {
+			if _, err := fmt.Fprintln(w, "- archived: `true`"); err != nil {
+				return err
+			}
+		}
 		if tags := notes.FormatTags(note.Tags); tags != "" {
 			if _, err := fmt.Fprintf(w, "- tags: `%s`\n", tags); err != nil {
 				return err
@@ -644,6 +700,9 @@ func noteSummary(note notes.Note) string {
 	var meta []string
 	if note.Pinned {
 		meta = append(meta, "pinned")
+	}
+	if note.Archived {
+		meta = append(meta, "archived")
 	}
 	if tags := notes.FormatTags(note.Tags); tags != "" {
 		meta = append(meta, tags)

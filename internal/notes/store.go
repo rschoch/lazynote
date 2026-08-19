@@ -21,8 +21,12 @@ const (
 	lockStaleAfter   = 5 * time.Minute
 )
 
-// ErrNoteNotFound reports that a mutation target no longer exists.
-var ErrNoteNotFound = errors.New("note not found")
+var (
+	// ErrNoteNotFound reports that a mutation target no longer exists.
+	ErrNoteNotFound = errors.New("note not found")
+	// ErrArchivedNote reports an attempt to pin an archived note.
+	ErrArchivedNote = errors.New("restore archived note before pinning")
+)
 
 // Note is the persisted representation of a lazynote entry.
 type Note struct {
@@ -33,6 +37,7 @@ type Note struct {
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	Tags      []string   `json:"tags,omitempty"`
 	Pinned    bool       `json:"pinned,omitempty"`
+	Archived  bool       `json:"archived,omitempty"`
 }
 
 // Store persists notes as a small JSON file.
@@ -208,6 +213,9 @@ func (s *Store) SetPinned(id string, pinned bool) ([]Note, bool, error) {
 			if updated[i].ID != id {
 				continue
 			}
+			if pinned && updated[i].Archived {
+				return ErrArchivedNote
+			}
 
 			if updated[i].Pinned == pinned {
 				return nil
@@ -241,6 +249,9 @@ func (s *Store) TogglePinned(id string) ([]Note, bool, error) {
 			if updated[i].ID != id {
 				continue
 			}
+			if updated[i].Archived && !updated[i].Pinned {
+				return ErrArchivedNote
+			}
 
 			updated[i].Pinned = !updated[i].Pinned
 			pinned = updated[i].Pinned
@@ -254,6 +265,42 @@ func (s *Store) TogglePinned(id string) ([]Note, bool, error) {
 	}
 
 	return updated, pinned, nil
+}
+
+// SetArchived sets the archived state for a note by ID and returns the updated list.
+func (s *Store) SetArchived(id string, archived bool) ([]Note, bool, error) {
+	var updated []Note
+	var changed bool
+	err := s.withLock(func() error {
+		loaded, err := s.loadUnlocked()
+		if err != nil {
+			return err
+		}
+
+		updated = append([]Note(nil), loaded...)
+		for i := range updated {
+			if updated[i].ID != id {
+				continue
+			}
+
+			if updated[i].Archived == archived && (!archived || !updated[i].Pinned) {
+				return nil
+			}
+			updated[i].Archived = archived
+			if archived {
+				updated[i].Pinned = false
+			}
+			changed = true
+			return s.saveUnlocked(updated)
+		}
+
+		return noteNotFoundError(id)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	return updated, changed, nil
 }
 
 // AddTags adds tags to a note by ID and returns the updated list.
@@ -337,6 +384,39 @@ func (s *Store) RemoveTags(id string, tags []string) ([]Note, bool, error) {
 		return nil, false, err
 	}
 
+	return updated, changed, nil
+}
+
+// SetTags replaces all tags on a note by ID and returns the updated list.
+func (s *Store) SetTags(id string, tags []string) ([]Note, bool, error) {
+	tags = NormalizeTags(tags)
+	var updated []Note
+	var changed bool
+	err := s.withLock(func() error {
+		loaded, err := s.loadUnlocked()
+		if err != nil {
+			return err
+		}
+
+		updated = append([]Note(nil), loaded...)
+		for i := range updated {
+			if updated[i].ID != id {
+				continue
+			}
+			if sameTags(updated[i].Tags, tags) {
+				return nil
+			}
+			updated[i].Tags = append([]string(nil), tags...)
+			touch(&updated[i])
+			changed = true
+			return s.saveUnlocked(updated)
+		}
+
+		return noteNotFoundError(id)
+	})
+	if err != nil {
+		return nil, false, err
+	}
 	return updated, changed, nil
 }
 

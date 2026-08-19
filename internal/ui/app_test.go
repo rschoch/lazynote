@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -299,10 +300,13 @@ func TestStatusLineIncludesPositionAndKeys(t *testing.T) {
 	if strings.Contains(got, "2026") {
 		t.Fatalf("statusLine() = %q, want no selected-note timestamp", got)
 	}
-	for _, want := range []string{"2/2", "↑↓ nav", "→ body", "n new", "p pin", "? help", "d del", "q quit"} {
+	for _, want := range []string{"2/2", "↑↓ nav", "→ body", "new", "pin", "? help", "delete", "quit"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
+	}
+	if strings.Contains(got, "…") {
+		t.Fatalf("statusLine() = %q, want no ellipsis in full hints", got)
 	}
 }
 
@@ -328,11 +332,33 @@ func TestStatusLineUsesCompactHintsWhenNarrow(t *testing.T) {
 	}
 }
 
+func TestStatusLineUsesSmartHintsBeforeCompact(t *testing.T) {
+	app := &App{
+		notes: []notes.Note{{Title: "one"}},
+	}
+
+	got := app.statusLineForWidth(80)
+	if runeLen(got) > 80 {
+		t.Fatalf("statusLineForWidth() length = %d, want at most 80: %q", runeLen(got), got)
+	}
+	for _, want := range []string{"↑↓ nav", "→ body", "/ filter", "views", "new", "? help"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("statusLineForWidth() = %q, want smart hint %q", got, want)
+		}
+	}
+	if strings.Contains(got, "archive") || strings.Contains(got, "reload") {
+		t.Fatalf("statusLineForWidth() = %q, want reduced smart hints", got)
+	}
+	if !strings.HasSuffix(strings.TrimSpace(got), "…") {
+		t.Fatalf("statusLineForWidth() = %q, want permanent smart-tier ellipsis", got)
+	}
+}
+
 func TestStatusLineIncludesEmptyState(t *testing.T) {
 	app := &App{}
 
 	got := app.statusLine()
-	for _, want := range []string{"0/0", "q quit"} {
+	for _, want := range []string{"0/0", "quit"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
@@ -349,7 +375,7 @@ func TestStatusLineIncludesDetailScrollOffset(t *testing.T) {
 	}
 
 	got := app.statusLine()
-	for _, want := range []string{"1/1", "scroll +4", "↑↓ scroll", "Pg page", "← list", "c copy"} {
+	for _, want := range []string{"1/1", "scroll +4", "↑↓ scroll", "Pg page", "← list", "copy"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
@@ -363,7 +389,7 @@ func TestStatusLineIncludesDeleteConfirmationHints(t *testing.T) {
 	}
 
 	got := app.statusLine()
-	for _, want := range []string{"Press d again", "d confirm", "↑↓ cancel", "q quit"} {
+	for _, want := range []string{"Press d again", "delete", "↑↓ cancel", "? help", "quit"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
@@ -380,10 +406,88 @@ func TestStatusLineIncludesMessageHints(t *testing.T) {
 	}
 
 	got := app.statusLine()
-	for _, want := range []string{"Deleted", "↑↓ nav", "→ body", "c copy", "q quit"} {
+	for _, want := range []string{"Deleted", "↑↓ nav", "→ body", "copy", "quit"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("statusLine() = %q, want %q", got, want)
 		}
+	}
+}
+
+func TestStatusLineHighlightsShortcutInitials(t *testing.T) {
+	app := &App{
+		theme: DefaultTheme(),
+		notes: []notes.Note{{Title: "one"}},
+	}
+
+	rendered := app.renderStatusLine(app.statusLine())
+	accent := ansiAttribute(DefaultTheme().ActiveBorder)
+	for _, word := range []string{"copy", "pin", "archive", "views", "quit"} {
+		runes := []rune(word)
+		want := accent + string(runes[0]) + "\x1b[0m" + string(runes[1:])
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered status = %q, want highlighted %q", rendered, word)
+		}
+	}
+	if !strings.Contains(rendered, "? help") {
+		t.Fatalf("rendered status = %q, want unchanged help hint", rendered)
+	}
+}
+
+func TestStatusHintsReflectSelectedNoteState(t *testing.T) {
+	app := &App{notes: []notes.Note{{Title: "one", Pinned: true}}}
+	if got := app.statusHints(); !strings.Contains(got, "unpin  tags  archive") {
+		t.Fatalf("pinned status hints = %q, want unpin action", got)
+	}
+
+	app.notes[0].Archived = true
+	app.notes[0].Pinned = false
+	if got := app.statusHints(); !strings.Contains(got, "tags  unarchive") || strings.Contains(got, "pin  tags") {
+		t.Fatalf("archived status hints = %q, want unarchive without pin", got)
+	}
+}
+
+func TestContextualStatusHintsHighlightActualKeys(t *testing.T) {
+	accent := ansiAttribute(DefaultTheme().ActiveBorder)
+	app := &App{
+		theme: DefaultTheme(),
+		notes: []notes.Note{{Title: "one", Pinned: true}},
+	}
+
+	rendered := app.renderStatusLine(app.statusLine())
+	if want := "un" + accent + "p\x1b[0min"; !strings.Contains(rendered, want) {
+		t.Fatalf("pinned status = %q, want embedded p highlighted", rendered)
+	}
+
+	app.notes[0].Pinned = false
+	app.notes[0].Archived = true
+	rendered = app.renderStatusLine(app.statusLine())
+	if want := "un" + accent + "a\x1b[0mrchive"; !strings.Contains(rendered, want) {
+		t.Fatalf("archived status = %q, want embedded a highlighted", rendered)
+	}
+}
+
+func TestEmptyNotesMessageDescribesCurrentView(t *testing.T) {
+	tests := []struct {
+		view noteView
+		want string
+	}{
+		{noteView{kind: viewActive}, "No active notes"},
+		{noteView{kind: viewPinned}, "No pinned notes"},
+		{noteView{kind: viewRecent}, "No recent notes"},
+		{noteView{kind: viewUntagged}, "No untagged notes"},
+		{noteView{kind: viewArchived}, "No archived notes"},
+		{noteView{kind: viewTag, tag: "work"}, "No notes tagged #work"},
+	}
+	for _, tt := range tests {
+		app := &App{currentView: tt.view}
+		if got := app.emptyNotesMessage(); got != tt.want {
+			t.Fatalf("emptyNotesMessage(%#v) = %q, want %q", tt.view, got, tt.want)
+		}
+	}
+
+	app := &App{currentView: noteView{kind: viewArchived}, filterQuery: "missing"}
+	if got := app.emptyNotesMessage(); got != "No matches" {
+		t.Fatalf("filtered emptyNotesMessage() = %q, want No matches", got)
 	}
 }
 
@@ -1120,6 +1224,27 @@ func TestNoteSubtitleIncludesTagsAndUpdatedAt(t *testing.T) {
 	}
 }
 
+func TestDetailHeaderPreventsTitleSubtitleCollision(t *testing.T) {
+	title := strings.Repeat("long title ", 8)
+	subtitle := "2026-08-20 12:00  edited 2026-08-20 13:00  #work #release"
+
+	gotTitle, gotSubtitle := detailHeader(title, subtitle, 60)
+	if runeLen(gotTitle)+runeLen(gotSubtitle)+2 > 48 {
+		t.Fatalf("detail header uses %d columns, want at most 48", runeLen(gotTitle)+runeLen(gotSubtitle)+2)
+	}
+	if runeLen(gotTitle) < 12 {
+		t.Fatalf("detail title width = %d, want title priority", runeLen(gotTitle))
+	}
+
+	narrowTitle, narrowSubtitle := detailHeader(title, subtitle, 28)
+	if narrowSubtitle != "" {
+		t.Fatalf("narrow subtitle = %q, want metadata hidden", narrowSubtitle)
+	}
+	if runeLen(narrowTitle) > 16 {
+		t.Fatalf("narrow title width = %d, want at most 16", runeLen(narrowTitle))
+	}
+}
+
 func TestHelpToggleUsesPopup(t *testing.T) {
 	app := &App{}
 
@@ -1138,6 +1263,202 @@ func TestHelpToggleUsesPopup(t *testing.T) {
 	}
 	if app.popup != nil {
 		t.Fatal("popup is not nil, want closed popup")
+	}
+}
+
+func TestShortPopupUsesCompactHeight(t *testing.T) {
+	app := &App{popup: &Popup{Title: "Menu", Lines: []string{"one", "two"}}}
+	_, height := app.popupSize(100, 30)
+	if height != 6 {
+		t.Fatalf("popup height = %d, want compact height 6", height)
+	}
+}
+
+func TestViewsSeparateActiveArchivedPinnedAndTags(t *testing.T) {
+	app := &App{allNotes: []notes.Note{
+		{ID: "active", Title: "active", Pinned: true, Tags: []string{"work"}},
+		{ID: "plain", Title: "plain"},
+		{ID: "archived", Title: "archived", Archived: true, Pinned: true, Tags: []string{"work"}},
+	}}
+
+	app.applyFilter("")
+	if got := len(app.notes); got != 2 {
+		t.Fatalf("active notes = %d, want 2", got)
+	}
+	app.currentView = noteView{kind: viewPinned}
+	app.applyFilter("")
+	if got := len(app.notes); got != 1 || app.notes[0].ID != "active" {
+		t.Fatalf("pinned view = %#v, want active pinned note", app.notes)
+	}
+	app.currentView = noteView{kind: viewArchived}
+	app.applyFilter("")
+	if got := len(app.notes); got != 1 || app.notes[0].ID != "archived" {
+		t.Fatalf("archived view = %#v, want archived note", app.notes)
+	}
+	app.currentView = noteView{kind: viewTag, tag: "work"}
+	app.applyFilter("")
+	if got := len(app.notes); got != 1 || app.notes[0].ID != "active" {
+		t.Fatalf("tag view = %#v, want active tagged note", app.notes)
+	}
+}
+
+func TestRecentViewKeepsFiftyNewestActiveNotes(t *testing.T) {
+	app := &App{}
+	for i := 0; i < 60; i++ {
+		app.allNotes = append(app.allNotes, notes.Note{
+			ID:        fmt.Sprintf("note-%02d", i),
+			CreatedAt: time.Unix(int64(i), 0),
+		})
+	}
+	app.allNotes = append(app.allNotes, notes.Note{
+		ID:        "archived-newest",
+		CreatedAt: time.Unix(100, 0),
+		Archived:  true,
+	})
+	app.currentView = noteView{kind: viewRecent}
+	app.applyFilter("")
+
+	if got := len(app.notes); got != recentNoteLimit {
+		t.Fatalf("recent notes = %d, want %d", got, recentNoteLimit)
+	}
+	if got := app.notes[0].ID; got != "note-59" {
+		t.Fatalf("first recent note = %q, want newest active note", got)
+	}
+	if noteIndexByID(app.notes, "archived-newest") >= 0 {
+		t.Fatal("recent view included archived note")
+	}
+}
+
+func TestToggleArchiveMovesNoteBetweenViews(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	if _, err := store.Append("archive me", "body"); err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+	app := loadedApp(t, store)
+	if err := app.togglePin(nil, nil); err != nil {
+		t.Fatalf("pin before archive: %v", err)
+	}
+	if !app.notes[0].Pinned {
+		t.Fatal("note was not pinned before archive")
+	}
+
+	if err := app.toggleArchive(nil, nil); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	if len(app.notes) != 0 {
+		t.Fatalf("active notes = %d, want archived note hidden", len(app.notes))
+	}
+	app.currentView = noteView{kind: viewArchived}
+	app.applyFilter("")
+	if len(app.notes) != 1 || !app.notes[0].Archived || app.notes[0].Pinned {
+		t.Fatalf("archived notes = %#v, want archived and unpinned note", app.notes)
+	}
+	if err := app.togglePin(nil, nil); err != nil {
+		t.Fatalf("pin archived note: %v", err)
+	}
+	if app.notes[0].Pinned {
+		t.Fatal("archived note was pinned")
+	}
+	if app.status != "Restore note before pinning" {
+		t.Fatalf("status = %q, want restore guidance", app.status)
+	}
+	if err := app.toggleArchive(nil, nil); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if len(app.notes) != 0 {
+		t.Fatalf("archived notes = %d, want restored note hidden", len(app.notes))
+	}
+}
+
+func TestStaleRefreshCannotRestoreArchivedState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	store := notes.NewStore(path)
+	note, err := store.Append("archive me", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+	archived, _, err := store.SetArchived(note.ID, true)
+	if err != nil {
+		t.Fatalf("archive note: %v", err)
+	}
+	staleSnapshot, err := snapshotFile(path)
+	if err != nil {
+		t.Fatalf("snapshot archived file: %v", err)
+	}
+
+	active, _, err := store.SetArchived(note.ID, false)
+	if err != nil {
+		t.Fatalf("restore note: %v", err)
+	}
+	app := &App{store: store, theme: DefaultTheme(), settings: DefaultSettings()}
+	app.applyLoadedNotes(active, "")
+
+	if app.applyRefreshSnapshot(path, staleSnapshot, archived) {
+		t.Fatal("stale refresh snapshot was applied")
+	}
+	if len(app.sourceNotes()) != 1 || app.sourceNotes()[0].Archived {
+		t.Fatalf("notes after stale refresh = %#v, want restored note", app.sourceNotes())
+	}
+}
+
+func TestTagPickerTogglesAndSavesTags(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.AppendWithTags("tag me", "body", []string{"work"})
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+	if _, err := store.AppendWithTags("other", "body", []string{"home"}); err != nil {
+		t.Fatalf("append other note: %v", err)
+	}
+	app := loadedApp(t, store)
+	app.selected = noteIndexByID(app.notes, note.ID)
+
+	if err := app.openTagPicker(nil, nil); err != nil {
+		t.Fatalf("open tag picker: %v", err)
+	}
+	if app.popup == nil || len(app.popup.Lines) != 2 {
+		t.Fatalf("popup = %#v, want two tags", app.popup)
+	}
+	workIndex := 0
+	if strings.Contains(app.popup.Lines[0], "#home") {
+		workIndex = 1
+	}
+	if err := app.popup.OnToggle(nil, workIndex); err != nil {
+		t.Fatalf("toggle tag: %v", err)
+	}
+	if err := app.popup.OnSelect(nil, workIndex); err != nil {
+		t.Fatalf("save tags: %v", err)
+	}
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	updated := loaded[noteIndexByID(loaded, note.ID)]
+	if len(updated.Tags) != 0 {
+		t.Fatalf("tags = %#v, want removed", updated.Tags)
+	}
+}
+
+func TestConfirmNewTagAddsNormalizedTag(t *testing.T) {
+	store := notes.NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.Append("tag me", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+	app := loadedApp(t, store)
+	app.inputMode = inputTag
+	app.tagTargetID = note.ID
+	app.tagInput = " #Project "
+
+	if err := app.confirmNewTag(nil); err != nil {
+		t.Fatalf("confirm tag: %v", err)
+	}
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if got, want := strings.Join(loaded[0].Tags, ","), "project"; got != want {
+		t.Fatalf("tags = %q, want %q", got, want)
 	}
 }
 

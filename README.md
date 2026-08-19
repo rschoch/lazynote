@@ -175,8 +175,8 @@ lazynote path
 ```
 
 `list` prints tab-separated `id`, `created_at`, and `title` fields, plus a
-metadata field when a note is pinned or tagged. `show` accepts a full ID or a
-unique ID prefix.
+metadata field when a note is pinned, archived, or tagged. `show` accepts a
+full ID or a unique ID prefix.
 
 Manage existing notes:
 
@@ -187,6 +187,8 @@ lazynote edit <id> 'new title' - < body.md
 lazynote delete <id>
 lazynote pin <id>
 lazynote unpin <id>
+lazynote archive <id>
+lazynote unarchive <id>
 lazynote tag <id> work idea
 lazynote untag <id> work
 lazynote tags <id>
@@ -202,8 +204,9 @@ choose the exact destination, or an existing directory for a timestamped backup
 inside that directory.
 
 Command words such as `list`, `show`, `search`, `edit`, `delete`, `pin`,
-`unpin`, `tag`, `untag`, `tags`, `path`, `backup`, and `export` are reserved
-when they are the first argument. Use `--` to use one as a title:
+`unpin`, `archive`, `unarchive`, `tag`, `untag`, `tags`, `path`, `backup`, and
+`export` are reserved when they are the first argument. Use `--` to use one as
+a title:
 
 ```sh
 lazynote -- search 'a note whose title is search'
@@ -298,6 +301,9 @@ Keys:
 - `n`: create a note in `$VISUAL`, `$EDITOR`, or `vi`
 - `e`: edit the selected note in `$VISUAL`, `$EDITOR`, or `vi`
 - `p`: pin or unpin the selected note
+- `t`: add or remove tags; Space toggles, Enter saves, and `n` creates a tag
+- `a`: archive the selected note, or restore it from the Archived view
+- `v`: choose Active, Pinned, Recent, Untagged, Archived, or a `#tag` view
 - `?`: show or hide the help overlay
 - `c`: copy the selected title or note body
 - `d` / delete: arm deletion; press `d` again to confirm
@@ -307,6 +313,9 @@ Keys:
 Copy uses the native macOS clipboard when available and terminal clipboard
 support on Linux, WSL, and Windows. Creating and editing open a temporary file
 whose first line is the note title and whose remaining content is the note body.
+The default Active view hides archived notes. Archiving also clears the note's
+pin. Use `v` to open the view picker; Recent contains the 50 newest active
+notes, and tag views match exact tags.
 The note body pane shows tags and edited timestamps when present. Pinned notes
 stay at the top of the list and use `▴` in the list gutter. Notes that arrive
 from another process while the TUI is open use `●` until selected. Fonts, glyph
@@ -390,8 +399,8 @@ Dropbox, iCloud Drive, or a private dotfiles repository. The TUI reloads when
 the file changes, including atomic replacements. Writes use a small lock file
 next to the notes file so concurrent CLI, TUI, script, and agent writes do not
 silently overwrite each other. Newer versions may write optional `tags`,
-`updated_at`, and `pinned` fields; older notes without these fields continue to
-load normally.
+`updated_at`, `pinned`, and `archived` fields; older notes without these fields
+continue to load normally.
 
 ## Development
 

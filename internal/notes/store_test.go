@@ -208,6 +208,87 @@ func TestStoreSetPinned(t *testing.T) {
 	}
 }
 
+func TestStoreSetArchived(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.Append("first", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	updated, changed, err := store.SetArchived(note.ID, true)
+	if err != nil {
+		t.Fatalf("archive note: %v", err)
+	}
+	if !changed || !updated[0].Archived {
+		t.Fatalf("changed = %v, archived = %v, want true", changed, updated[0].Archived)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if !loaded[0].Archived {
+		t.Fatal("archived state was not persisted")
+	}
+	if _, _, err := store.SetPinned(note.ID, true); !errors.Is(err, ErrArchivedNote) {
+		t.Fatalf("pin archived note error = %v, want ErrArchivedNote", err)
+	}
+
+	updated, changed, err = store.SetArchived(note.ID, false)
+	if err != nil {
+		t.Fatalf("unarchive note: %v", err)
+	}
+	if !changed || updated[0].Archived {
+		t.Fatalf("changed = %v, archived = %v, want false", changed, updated[0].Archived)
+	}
+}
+
+func TestArchivingClearsPin(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.Append("first", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+	if _, _, err := store.SetPinned(note.ID, true); err != nil {
+		t.Fatalf("pin note: %v", err)
+	}
+
+	updated, changed, err := store.SetArchived(note.ID, true)
+	if err != nil {
+		t.Fatalf("archive note: %v", err)
+	}
+	if !changed || !updated[0].Archived || updated[0].Pinned {
+		t.Fatalf("updated note = %#v, want archived and unpinned", updated[0])
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if !loaded[0].Archived || loaded[0].Pinned {
+		t.Fatalf("persisted note = %#v, want archived and unpinned", loaded[0])
+	}
+}
+
+func TestStoreSetTagsReplacesTagsAtomically(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "notes.json"))
+	note, err := store.AppendWithTags("first", "body", []string{"work", "idea"})
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	updated, changed, err := store.SetTags(note.ID, []string{" Home ", "#work", "home"})
+	if err != nil {
+		t.Fatalf("set tags: %v", err)
+	}
+	if !changed {
+		t.Fatal("changed = false, want true")
+	}
+	if got, want := strings.Join(updated[0].Tags, ","), "home,work"; got != want {
+		t.Fatalf("tags = %q, want %q", got, want)
+	}
+}
+
 func TestStoreAppendAndUpdateTags(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "notes.json"))
 	note, err := store.AppendWithTags("first", "body", []string{" Work ", "#Idea", "work"})
