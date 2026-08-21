@@ -14,6 +14,7 @@ Use `lazynote` as a local notes layer for durable context that should survive th
 - For agent workflows, use the CLI commands. Do not open the TUI unless the user explicitly asks.
 - Do not inspect the lazynote source tree to figure out how to save notes; use the installed `lazynote` CLI.
 - Ask before saving credentials, tokens, secrets, or sensitive personal data unless the user explicitly requested that exact save.
+- Ask before permanently deleting a note unless the user explicitly requested that deletion.
 - Prefer short, descriptive titles.
 
 ## Save notes
@@ -40,7 +41,7 @@ For command output:
 some-command | lazynote --quiet 'diagnostic output'
 ```
 
-Use single quotes around literal shell text. If a title would collide with a command word such as `list` or `search`, use `--` before the title.
+Use single quotes around literal shell text. If a title would collide with a command word such as `list`, `search`, `help`, or `version`, use `--` before the title.
 
 ## Retrieve and manage notes
 
@@ -53,12 +54,20 @@ Use single quotes around literal shell text. If a title would collide with a com
 - Edit directly: `lazynote edit <id> 'new title' 'new body'`
 - Delete a note: `lazynote delete <id>`
 - Pin or unpin a note: `lazynote pin <id>` or `lazynote unpin <id>`
+- Archive or restore a note: `lazynote archive <id>` or `lazynote unarchive <id>`
 - Add or remove tags: `lazynote tag <id> work` or `lazynote untag <id> work`
 - Print a note's tags: `lazynote tags <id>`
 - Print the notes file path: `lazynote path`
 - Back up the raw notes JSON file: `lazynote backup` or `lazynote backup <path>`
 - Export everything: `lazynote export markdown` or `lazynote export json`
 
-`lazynote list` prints tab-separated `id`, `created_at`, and `title` fields, plus metadata when present. Most note commands accept a full note ID or a unique ID prefix.
+Search is case- and accent-insensitive. `lazynote list`, `search`, `show`, and
+both exports include archived notes; summaries and exports mark archived
+entries. Archiving clears a note's pin, and an archived note must be restored
+before it can be pinned again.
+
+`lazynote list` prints tab-separated `id`, `created_at`, and `title` fields,
+plus metadata when present. Most note commands accept a full note ID or a
+unique ID prefix.
 
 Do not edit the notes JSON file directly unless the user explicitly asks for low-level recovery or repair.

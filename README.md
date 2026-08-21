@@ -186,6 +186,7 @@ lazynote edit <id> 'new title' 'new body'
 lazynote edit <id> 'new title' - < body.md
 lazynote delete <id>
 lazynote pin <id>
+lazynote pin --toggle <id>
 lazynote unpin <id>
 lazynote archive <id>
 lazynote unarchive <id>
@@ -198,15 +199,24 @@ lazynote tags <id>
 the title and body without opening an editor. `tag` normalizes tags to
 lower-case names and accepts optional leading `#`.
 
+Search is case- and accent-insensitive, so queries such as `cafe` match
+`Café`. CLI `list`, `search`, `show`, and export commands include archived
+notes; archived entries are marked in summaries and exports. The TUI filters
+them into its Archived view instead.
+
+Convenience aliases are `rm` for `delete`, `show -b` for `show --body`, and
+`export md` for `export markdown`. `-h` and `-v` are short forms of `--help`
+and `--version`.
+
 `backup` prints the backup file path. With no path it writes a timestamped JSON
 copy under a `backups` directory next to the notes file. Pass a file path to
 choose the exact destination, or an existing directory for a timestamped backup
 inside that directory.
 
-Command words such as `list`, `show`, `search`, `edit`, `delete`, `pin`,
-`unpin`, `archive`, `unarchive`, `tag`, `untag`, `tags`, `path`, `backup`, and
-`export` are reserved when they are the first argument. Use `--` to use one as
-a title:
+Command words such as `list`, `show`, `search`, `edit`, `delete`, `rm`, `pin`,
+`unpin`, `archive`, `unarchive`, `tag`, `untag`, `tags`, `path`, `backup`,
+`export`, `help`, and `version` are reserved when they are the first argument.
+Use `--` to use one as a title:
 
 ```sh
 lazynote -- search 'a note whose title is search'
@@ -231,7 +241,11 @@ first:
 codex plugin marketplace add rschoch/lazynote
 ```
 
-Then open `/plugins` in Codex and install `lazynote`.
+Then open `/plugins` in Codex and install `lazynote`, or install it directly:
+
+```sh
+codex plugin add lazynote@lazynote
+```
 
 To pick up newer plugin instructions later, upgrade the marketplace source and
 update the installed plugin from `/plugins`:
@@ -260,19 +274,21 @@ does not require cloning `lazynote` first:
 /reload-plugins
 ```
 
-To pick up newer plugin instructions later, reinstall the plugin and reload:
+To pick up newer plugin instructions later, update the marketplace, reinstall
+the plugin, and reload if Claude Code asks you to:
 
 ```text
+/plugin marketplace update lazynote
 /plugin install lazynote@lazynote
 /reload-plugins
 ```
 
-Invoke the Claude Code skill with `/lazynote`:
+Invoke the namespaced Claude Code skill with `/lazynote:lazynote`:
 
 ```text
-/lazynote Save the proposed implementation plan.
-/lazynote Search for notes about release packaging.
-/lazynote Save a summary of this debugging session.
+/lazynote:lazynote Save the proposed implementation plan.
+/lazynote:lazynote Search for notes about release packaging.
+/lazynote:lazynote Save a summary of this debugging session.
 ```
 
 ## TUI
@@ -292,11 +308,12 @@ Keys:
 
 - left: focus note list
 - right: focus note body
-- down: move or scroll down in the active pane
-- up: move or scroll up in the active pane
+- down: move or scroll down in the active pane; the note list wraps to the top
+- up: move or scroll up in the active pane; the note list wraps to the bottom
 - PageDown: scroll note body down
 - PageUp: scroll note body up
-- `/`: filter notes by title, body, or `#tag`; Enter applies, Esc cancels
+- `/`: case- and accent-insensitive filter by title, body, or `#tag`; Enter
+  applies, Esc cancels
 - `r`: reload notes from disk now
 - `n`: create a note in `$VISUAL`, `$EDITOR`, or `vi`
 - `e`: edit the selected note in `$VISUAL`, `$EDITOR`, or `vi`
@@ -316,6 +333,9 @@ whose first line is the note title and whose remaining content is the note body.
 The default Active view hides archived notes. Archiving also clears the note's
 pin. Use `v` to open the view picker; Recent contains the 50 newest active
 notes, and tag views match exact tags.
+Tags have no separate registry: a tag disappears when no note uses it. Tags
+used only by archived notes remain available in the tag picker but do not get
+their own active tag view.
 The note body pane shows tags and edited timestamps when present. Pinned notes
 stay at the top of the list and use `▴` in the list gutter. Notes that arrive
 from another process while the TUI is open use `●` until selected. Fonts, glyph

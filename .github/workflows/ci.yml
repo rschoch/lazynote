@@ -47,7 +47,7 @@ jobs:
         run: |
           sh -n install.sh
           sh install.sh --help >/dev/null
-          INSTALL_DIR="$RUNNER_TEMP/lazynote-install" sh install.sh --version v0.1.0
+          INSTALL_DIR="$RUNNER_TEMP/lazynote-install" sh install.sh
           "$RUNNER_TEMP/lazynote-install/lazynote" --version
 
       - name: Run tests

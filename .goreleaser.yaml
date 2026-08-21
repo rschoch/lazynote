@@ -44,7 +44,7 @@ nfpms:
     vendor: rschoch
     homepage: https://github.com/rschoch/lazynote
     maintainer: rschoch <rschoch.dev@gmail.com>
-    description: Small terminal notes app built with gocui.
+    description: Local-first terminal notes app for human, script, and agent workflows.
     section: utils
     priority: optional
     bindir: /usr/bin

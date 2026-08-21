@@ -176,11 +176,22 @@ func TestRunPrintsHelp(t *testing.T) {
 	}
 
 	got := stdout.String()
-	if !bytes.Contains([]byte(got), []byte("Usage:")) {
-		t.Fatalf("stdout = %q, want usage text", got)
-	}
-	if !bytes.Contains([]byte(got), []byte("LAZYNOTE_PATH")) {
-		t.Fatalf("stdout = %q, want environment help", got)
+	for _, want := range []string{
+		"Usage:",
+		"lazynote show [--body|-b] <id>",
+		"lazynote rm <id>",
+		"lazynote pin [--toggle] <id>",
+		"lazynote export md",
+		"case- and accent-insensitive",
+		"LAZYNOTE_PATH",
+		"LAZYNOTE_CONFIG",
+		"LAZYNOTE_THEME",
+		"VISUAL",
+		"EDITOR",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout = %q, want documented surface %q", got, want)
+		}
 	}
 }
 
@@ -491,6 +502,49 @@ func TestRunPinsAndUnpinsNote(t *testing.T) {
 	}
 }
 
+func TestDocumentedCommandAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	store := notes.NewStore(path)
+	note, err := store.Append("alias test", "body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"show", "-b", note.ID[:6]}, nil, &stdout); err != nil {
+		t.Fatalf("run show -b: %v", err)
+	}
+	if got, want := stdout.String(), "body\n"; got != want {
+		t.Fatalf("show -b stdout = %q, want %q", got, want)
+	}
+
+	stdout.Reset()
+	if err := run([]string{"pin", "--toggle", note.ID[:6]}, nil, &stdout); err != nil {
+		t.Fatalf("run pin --toggle: %v", err)
+	}
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	if !loaded[0].Pinned {
+		t.Fatal("pin --toggle did not pin note")
+	}
+
+	stdout.Reset()
+	if err := run([]string{"rm", note.ID[:6]}, nil, &stdout); err != nil {
+		t.Fatalf("run rm: %v", err)
+	}
+	loaded, err = store.Load()
+	if err != nil {
+		t.Fatalf("load notes after rm: %v", err)
+	}
+	if len(loaded) != 0 {
+		t.Fatalf("loaded %d notes after rm, want 0", len(loaded))
+	}
+}
+
 func TestRunArchivesAndUnarchivesNote(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notes.json")
 	t.Setenv("LAZYNOTE_PATH", path)
@@ -529,6 +583,53 @@ func TestRunArchivesAndUnarchivesNote(t *testing.T) {
 	}
 	if loaded[0].Archived {
 		t.Fatal("note is still archived")
+	}
+}
+
+func TestArchivedNotesRemainAvailableToCLIAndAccentInsensitiveSearch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notes.json")
+	t.Setenv("LAZYNOTE_PATH", path)
+
+	store := notes.NewStore(path)
+	note, err := store.Append("Café résumé", "naïve body")
+	if err != nil {
+		t.Fatalf("append note: %v", err)
+	}
+	if _, _, err := store.SetArchived(note.ID, true); err != nil {
+		t.Fatalf("archive note: %v", err)
+	}
+
+	commands := []struct {
+		name string
+		args []string
+	}{
+		{name: "list", args: []string{"list"}},
+		{name: "search", args: []string{"search", "cafe resume"}},
+		{name: "markdown export", args: []string{"export", "markdown"}},
+		{name: "markdown alias", args: []string{"export", "md"}},
+	}
+	for _, command := range commands {
+		t.Run(command.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			if err := run(command.args, nil, &stdout); err != nil {
+				t.Fatalf("run %v: %v", command.args, err)
+			}
+			if got := stdout.String(); !strings.Contains(got, note.ID) || !strings.Contains(got, "archived") {
+				t.Fatalf("stdout = %q, want archived note %s", got, note.ID)
+			}
+		})
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"export", "json"}, nil, &stdout); err != nil {
+		t.Fatalf("run JSON export: %v", err)
+	}
+	var exported []notes.Note
+	if err := json.Unmarshal(stdout.Bytes(), &exported); err != nil {
+		t.Fatalf("decode JSON export: %v", err)
+	}
+	if len(exported) != 1 || exported[0].ID != note.ID || !exported[0].Archived {
+		t.Fatalf("exported = %#v, want archived note %s", exported, note.ID)
 	}
 }
 

@@ -15,11 +15,12 @@ commands that are easy for humans, scripts, and coding agents to use.
 - Auto-refresh in the TUI for notes written by other processes.
 - Lock-file write coordination and raw JSON backups.
 - TUI search, edit, manual refresh, pinned notes, unread markers, archive, and
-  active/pinned/recent/untagged/tag views.
+  active/pinned/recent/untagged/archived/tag views.
 - Create notes from inside the TUI using the configured external editor.
 - CLI edit, delete, pin, unpin, archive, unarchive, tag, untag, and tag
   inspection.
 - Optional note metadata for `tags`, `updated_at`, `pinned`, and `archived`.
+- Case- and accent-insensitive CLI and TUI search.
 - TUI help overlay via `?`.
 
 ## Future Candidates

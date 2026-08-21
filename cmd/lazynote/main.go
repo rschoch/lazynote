@@ -183,10 +183,11 @@ func printUsage(w io.Writer) {
   command | lazynote <title>
   command | lazynote
   lazynote list
-  lazynote show [--body] <id>
+  lazynote show [--body|-b] <id>
   lazynote search <query>
   lazynote edit <id> [<title> <note>|<title> -]
   lazynote delete <id>
+  lazynote rm <id>
   lazynote pin [--toggle] <id>
   lazynote unpin <id>
   lazynote archive <id>
@@ -197,26 +198,28 @@ func printUsage(w io.Writer) {
   lazynote path
   lazynote backup [path]
   lazynote export markdown
+  lazynote export md
   lazynote export json
   lazynote
-  lazynote --version
-  lazynote --help
+  lazynote --version, -v
+  lazynote --help, -h
 
 Commands:
   <title> <note>  Append a note from arguments
   <title> -       Append a note using stdin as the body
   -- <title> <note>
                   Append a note whose title starts with a command or flag
-  list            List note IDs, timestamps, and titles
+  list            List all note IDs, timestamps, and titles, including archived
   show <id>       Print one note by ID or unique ID prefix
   show --body <id>
-                  Print only the note body
-  search <query>  List notes matching title, body, or tag text
+                  Print only the note body (alias: -b)
+  search <query>  List all notes matching title, body, or tag text
+                  Matching is case- and accent-insensitive
   edit <id>       Edit a note in $VISUAL, $EDITOR, or vi
   edit <id> <title> <note>
                   Replace a note from arguments
-  delete <id>     Delete a note
-  pin <id>        Pin a note
+  delete <id>     Delete a note (alias: rm)
+  pin <id>        Pin a note; --toggle flips its current state
   unpin <id>      Unpin a note
   archive <id>    Hide a note from the active TUI views
   unarchive <id>  Restore an archived note
@@ -227,7 +230,7 @@ Commands:
   tags <id>       Print a note's tags
   path            Print the notes JSON file path
   backup [path]   Copy the raw notes JSON file to a timestamped backup
-  export markdown Export all notes as Markdown
+  export markdown Export all notes as Markdown (alias: md)
   export json     Export all notes as JSON
   version         Print version information
   help            Print this help text
@@ -238,6 +241,10 @@ Options:
 
 Environment:
   LAZYNOTE_PATH   Override the notes JSON file path
+  LAZYNOTE_CONFIG Override the TUI config file path
+  LAZYNOTE_THEME  Override the configured TUI theme
+  VISUAL          Preferred editor for creating and editing notes
+  EDITOR          Editor fallback when VISUAL is not set
 `)
 }
 

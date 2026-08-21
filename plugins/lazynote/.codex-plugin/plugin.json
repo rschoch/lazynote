@@ -1,7 +1,7 @@
 {
   "name": "lazynote",
-  "version": "0.1.5",
-  "description": "Agent-friendly workflows for saving and retrieving local lazynote notes.",
+  "version": "0.1.6+codex.20260821114729",
+  "description": "Agent-friendly workflows for saving, retrieving, and managing local lazynote notes.",
   "author": {
     "name": "rschoch",
     "url": "https://github.com/rschoch"
@@ -19,8 +19,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "lazynote",
-    "shortDescription": "Save and retrieve local terminal notes from agent sessions.",
-    "longDescription": "Use the lazynote CLI as a lightweight local notes layer for coding agents, shell workflows, and human TUI review.",
+    "shortDescription": "Save, retrieve, and manage local terminal notes.",
+    "longDescription": "Use the lazynote CLI as a lightweight local notes layer for coding agents, shell workflows, organization, and human TUI review.",
     "developerName": "rschoch",
     "category": "Productivity",
     "capabilities": [
